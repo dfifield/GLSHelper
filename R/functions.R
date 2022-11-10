@@ -1,0 +1,655 @@
+
+#'@export
+#'@title Do geolocation for multiple GLS data sets
+#'
+#'@description Process multiple GLS logger raw light data sets according to
+#'    settings given in a configuration CSV file.
+#'
+#'@param folder \[character]\cr Required. The name of a folder which contains
+#'   the GLS light data for one or more devices. The light data for each device
+#'   must be in a separate sub-folder of \code{folder}. The name of each
+#'   sub-folder must match the \code{tagName} column of the config file. See
+#'   the \code{file} parameter.
+#'
+#'@param cfgfile \[character]\cr Required. The full pathname of a CSV configuration
+#'    file. This file contains one line per GLS data set to
+#'    be processed. See \code{\link{do_geolocation}} for details.
+#'
+#'@param shapefolder \[character]\cr optional. The full pathname to a folder
+#'    where shapefiles will be stored (if requested),
+#'
+#'@details This function is a wrapper for \code{\link{do_geolocation()}}. It
+#'    reads the config file specified by \code{folder} and \code{file} and
+#'    calls \code{do.geolocation} repeatedly - once for each data set.
+#'
+#'    There are quite strict naming conventions for subfolders, light files, etc.
+#'    See \code{\link{create_GLSHelper_folders}} for details.
+#'
+#'@return Nothing.
+#'@section Author: Dave Fifield
+
+do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL) {
+  cfgs <- readr::read_csv(cfgfile,
+          col_types = #"ccddlDDlDDlDDlDDTTdddllllllllcdlcllldlddddllccllccdccd"
+    readr::cols( tagName =  "c",
+      include = "l",
+      lightFile	 =  "c",
+      colNames = "c",
+      lThresh	 =  "d",
+      maxLightInt	 =  "d",
+      removeFallEqui	 =  "l",
+      fallEquiStart	 =  readr::col_date(),
+      fallEquiEnd	 =  readr::col_date(),
+      removeSpringEqui	 =  "l",
+      springEquiStart	 =  readr::col_date(),
+      springEquiEnd	 =  readr::col_date(),
+      doWinterOnly	 =  "l",
+      wintStart	 =  readr::col_date(),
+      wintEnd	 =  readr::col_date(),
+      doDateFilter	 =  "l",
+      filterStart = readr::col_date(),
+      filterEnd = readr::col_date(),
+      deplStart	 =  readr::col_date(),
+      deplEnd	 =  readr::col_date(),
+      deplLat	 =  "d",
+      deplLong	 =  "d",
+      calibStart	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
+      calibEnd	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
+      calibLat	 =  "d",
+      calibLong	 =  "d",
+      elev_offset	 =  "d",
+      keepCalibPoints	 =  "l",
+      loadLight	 =  "l",
+      loadCalib	 =  "l",
+      calibAsk	 =  "l",
+      deplAsk	 =  "l",
+      createShapefile	 =  "l",
+      boxcarSmooth	 =  "l",
+      b_func	 =  "c",
+      b_width	 =  "d",
+      b_pad	 =  "l",
+      b_w	 =  "c",
+      b_na.rm	 =  "l",
+      b_anchor.ends	 =  "l",
+      doDistanceFilter	 =  "l",
+      maxSpeed	 =  "d",
+      removeOutliers	 =  "l",
+      minX	 =  "d",
+      maxX	 =  "d",
+      minY	 =  "d",
+      maxY	 =  "d",
+      doStatPeriods	 =  "l",
+      doTripMap	 =  "l",
+      Xlim	 =  "c",
+      Ylim	 =  "c",
+      createKernel	 =  "l",
+      createKernelShapefile	 =  "l",
+      pcts	 =  "c",
+      projString	 =  "c",
+      h	 =  "d",
+      unin	 =  "c",
+      unout =  "c",
+      grid =  "d")
+    ) %>%
+    dplyr::filter(include == TRUE) %>%
+    # remove rows that are all NA, Excel likes to insert these.
+    dplyr::filter(!dplyr::if_all(dplyr::everything(), is.na)) %>%
+    dplyr::mutate(fallEquiStart = as.POSIXct(fallEquiStart),
+             fallEquiEnd = as.POSIXct(fallEquiEnd),
+             springEquiStart = as.POSIXct(springEquiStart),
+             springEquiEnd = as.POSIXct(springEquiEnd),
+             wintStart = as.POSIXct(wintStart),
+             wintEnd = as.POSIXct(wintEnd),
+             deplStart = as.POSIXct(deplStart),
+             deplEnd = as.POSIXct(deplEnd),
+             filterStart = as.POSIXct(filterStart),
+             filterEnd = as.POSIXct(filterEnd),
+             projString = gsub('"', "", projString)
+           ) %>%
+    dplyr::arrange(tagName)
+
+  cfgs %>%
+    split(1:nrow(.)) %>%
+    # purrr::map(do.geo.catch, folder = folder, elev = elev, shapefolder = shapefolder) %>%
+    purrr::map(do_geolocation, folder = folder, elev = elev,
+               shapefolder = shapefolder) %>%
+    purrr::set_names(cfgs$tagName)
+}
+
+do.geo.catch <- function(cfg, folder, elev, shapefolder) {
+  tryCatch(do_geolocation(cfg = cfg, folder = folder, elev = elev, shapefolder = shapefolder),
+                  error = function(e) {
+                    message(sprintf("\n\nERROR:An error occured during process of %s: '%s",
+                                    cfg$tagName, e))
+                  })
+}
+
+#'@export
+#'@title Do geolocation for one GLS data set
+#'
+#'@description Process a single GLS logger raw light data set according to
+#'    settings given in \code{cfg} using the \pkg{GeoLight} package.
+#'
+#'@param cfg \[character]\cr Required. A dataframe of configuration information
+#'    to control the processing.
+#'
+#'@param folder \[character]\cr Required. The path to the folder that contains
+#'    the tag data stored in separate sub-folders for each tag. The name of
+#'    each sub-folder must match the \code{cfg$tagName}.
+#'
+#'@param elev \[character]\cr Required. elevation angle to use, omit to use
+#'    elevation angle specified in \code{cfg}.
+#'
+#'@param shapefolder \[character]\cr optional. The full pathname to a folder
+#'    where shapefiles will be stored (if requested),
+#'
+#'@details The details
+#'
+#'    There are quite strict naming conventions for subfolders, light files, etc.
+#'
+#'@return Nothing.
+#'@section Author: Dave Fifield
+do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
+  message(sprintf("\n\nProcessing tag %s", cfg$tagName))
+
+  tagDir <- file.path(folder, cfg$tagName)
+  calibFile <- file.path(tagDir, paste0(cfg$tagName," calibration twilights.RData"))
+  twiFile <- file.path(tagDir, paste0(cfg$tagName, " twilights.RData"))
+  calibLoc <- c(cfg$calibLong, cfg$calibLat)
+  w <- as.numeric(unlist(strsplit(cfg$b_w, split = ",")))
+  Xlim <- as.numeric(unlist(strsplit(cfg$Xlim, split = ",")))
+  Ylim <- as.numeric(unlist(strsplit(cfg$Ylim, split = ",")))
+  colNames <- unlist(strsplit(cfg$colNames, split = ","))
+  pcts <- as.numeric(unlist(strsplit(cfg$pcts, split = ",")))
+
+  # read data, implicitly assumes first row is headers
+  # (it is some stuff for BAS loggers which gets ignored)
+  alldat <- read.csv(file.path(tagDir, cfg$lightFile))
+  names(alldat) <- colNames
+
+  # create POSIXct date
+  alldat$date <- as.POSIXct(strptime(as.character(alldat$datetime), format = "%d/%m/%y %H:%M:%S", tz = "UTC"))
+
+  # calibration
+  calib <- dplyr::filter(alldat, date >= as.POSIXct(cfg$calibStart, tz = "UTC") &
+                           date <= as.POSIXct(cfg$calibEnd, tz = "UTC"))
+  plot(calib$date, calib$light, type = "l", main = paste0(cfg$tagName, " calibration"))
+
+  if (cfg$loadCalib) {
+    load(cfg$calibFile)
+  } else {    # get sun elevation angle from calibration data
+    calibtwi <- GeoLight::twilightCalc(datetime = calib$date, light = calib$light, LightThreshold = cfg$lThresh,
+                             maxLight = cfg$maxLightInt, ask = cfg$calibAsk)
+    # mark calib points as such in case we want to map them differently later
+    calibtwi$src <- "Calib"
+
+    save(calibtwi, file =  calibFile)
+  }
+
+  # if no default elev given
+  if (is.null(elev)) {
+    elev <- with(calibtwi, GeoLight::getElevation(tFirst, tSecond, type,
+                                  known.coord = calibLoc))
+  }
+  message(sprintf("Elevation angle calculated from calibration period: %.2f", elev))
+
+  # add offset to elevation angle
+  elev <- ifelse(is.na(cfg$elev_offset), elev, elev + cfg$elev_offset)
+  message(sprintf("Final elevation angle including offset of %.2f: %.2f",
+                  cfg$elev_offset, elev))
+
+  # keep calibration points?
+  if (cfg$keepCalibPoints) {
+    calibCoord <- GeoLight::coord(calibtwi$tFirst, calibtwi$tSecond,
+                                  calibtwi$type, degElevation = elev)
+  }
+
+  dat <- alldat
+
+  # arbitrary date filter useful to exclude as much of at colony time as possible
+  if (cfg$doDateFilter) {
+    dat <- dplyr::filter(dat, date >= cfg$filterStart & date <=  cfg$filterEnd)
+  }
+
+  # remove spring Equinox
+  if (cfg$removeSpringEqui) {
+    dat <- dplyr::filter(dat, date <= cfg$springEquiStart | date >= cfg$springEquiEnd)
+  }
+
+  # remove fall Equinox
+  if (cfg$removeFallEqui) {
+    dat <- dplyr::filter(dat, date <= cfg$fallEquiStart | date >= cfg$fallEquiEnd)
+  }
+
+  # only extract winter?
+  if (cfg$doWinterOnly) {
+    dat <- dplyr::filter(dat, date >= cfg$wintStart & date <= cfg$wintEnd)
+  }
+
+  # get dawn and dusk times for deployment
+  if (cfg$loadLight) {
+    load(twiFile)
+  } else {
+    twi <- GeoLight::twilightCalc(datetime = dat$date,
+                                  light = dat$light,
+                                  LightThreshold = cfg$lThresh,
+                                  maxLight = cfg$maxLightInt,
+                                  ask = cfg$deplAsk)
+
+    twi$src <- "Deployment" # mark these as deployment period
+    save(twi, file = twiFile)
+  }
+
+  # calculate locations
+  coord <- GeoLight::coord(twi$tFirst, twi$tSecond, twi$type, degElevation = elev)
+
+  # remove points outside specified area?
+  if (cfg$removeOutliers) {
+    # Remove positions way outside the study area for example on the other side of the world
+    cond <- (coord[, 1] >= cfg$minX & coord[, 1] <= cfg$maxX) &
+            (coord[, 2] >= cfg$minY & coord[, 2] <= cfg$maxY)
+    coord <- coord[cond, ]
+    twi <- twi[cond, ]
+  }
+
+  # remove unrealistic positions - not sure what distance should be
+  if (cfg$doDistanceFilter) {
+    filt <- NA
+    filt <- GeoLight::distanceFilter(twi$tFirst, twi$tSecond, twi$type,
+                    degElevation = elev, distance = cfg$maxSpeed, units = "hour")
+
+    #Need to check this since sometimes the distance filter fails
+    if (!is.na(filt)) {
+      coord <- coord[filt,]
+      twi <- twi[filt,]
+    }
+  }
+
+  # smoothing - currently smooths twice - Should add an option to choose how many times to smooth
+  if (cfg$boxcarSmooth) {
+    smth <- coord
+    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    traj <- cbind(twi, coord, smth)
+    names(traj) <- c(names(twi), c("lng", "lat"), c("smthlng", "smthlat"))
+  } else {
+    # create a trajectory df and map it
+    traj <- cbind(twi, coord)
+    names(traj) <- c(names(twi), c("lng", "lat"))
+  }
+
+  # get stationary periods?
+  if (cfg$doStatPeriods) {
+    site <- GeoLight::changeLight(twi$tFirst, twi$tSecond, twi$type,
+                              rise.prob = 0.1, set.prob = 0.1, days = 5)$site
+    GeoLight::siteMap(coord, site, xlim = Xlim, ylim = Ylim)
+  }
+
+  # map it
+  if (cfg$doTripMap) {
+    GeoLight::tripMap(coord, xlim = Xlim, ylim = Ylim)
+  }
+
+
+  # combined calibration data in with deployment data
+  if (cfg$keepCalibPoints) {
+    traj <- rbind(cbind(calibtwi, calibCoord), traj)
+  }
+
+  # create months and filter positions that are NA
+  traj %<>%
+    dplyr::mutate(month = factor(format(traj$tFirst, "%b"),
+      levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")),
+    ) %>%
+    dplyr::filter(!is.na(lat))
+
+  # create spatialpointsdataframe
+  shp <- sp::SpatialPointsDataFrame(cbind(traj$lng, traj$lat), data = traj,
+                                    proj4string = sp::CRS("+proj=longlat"))
+  shp$month <- as.integer(shp$month)
+
+  # create shapefile
+  if (cfg$createShapefile) {
+    filename <- paste(cfg$tagName, "thr", cfg$lThresh, "elev", round(elev, 2),
+                  ifelse(cfg$doWinterOnly, "wint", ""),
+                  ifelse(cfg$boxcarSmooth, "smooth2", ""), "R", sep = "_")
+    message(sprintf("\nCreating shapefile: %s\n", filename))
+    rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
+                    driver = "ESRI Shapefile", overwrite_layer = T)
+  }
+
+  if (cfg$createKernel) {
+    # Create kernel density surface for all dateranges (for selected animals),
+    # potentially doing multiple animal kernels for each date range.
+    #kerns <- Get.kernels(points = shp, projString = projString, h = h, grid = grid)
+    kerns <- Get.kernels(points = shp, projString = cfg$projString, h = cfg$h,
+                         grid = cfg$grid)
+
+    ######################### generate volume contours ###############################
+    #
+    # Generate all the required volume contours for each date range and data
+    # subset (based on IDField) in kerns.
+    # conts is a 3 level list with
+    # level 1 = date ranges
+    #   level 2 = data subsets (based on IDField)
+    #     level 3 = volume percentage levels
+    conts <- Get.contours(kerns = kerns, pcts = pcts, unin = cfg$unin,
+                          unout = cfg$unout)
+    cont <- conts[[1]][[1]]
+
+    # convert back to lat long for plotting
+    cont <- sp::spTransform(x = cont, CRSobj = sp::CRS("+proj=longlat +ellps=WGS84"))
+
+    # Save volume contours, if requested
+    if (cfg$createKernelShapefile) {
+      writeContoursShapefiles(conts, shapefolder,
+                              paste0(cfg$tagName, "_kern_", pcts), overwrite_layer = T)
+    }
+  }
+
+  # create seasons for mapping before/after equinoxes
+  fallequi <- lubridate::ymd(paste(lubridate::year(cfg$fallEquiStart), 9, 21,
+                                   sep = "-"))
+  sprequi <- lubridate::ymd(paste(lubridate::year(cfg$springEquiStart), 3, 21,
+                                  sep = "-"))
+  traj <- traj %>%
+    dplyr::mutate(season = dplyr::case_when(
+      tFirst <= fallequi | tFirst >= sprequi ~ "spring_summer",
+      tFirst > fallequi & tFirst < sprequi ~ "fall_winter",
+      TRUE ~ NA_character_))
+
+  pal.season <- leaflet::colorFactor(c(spring_summer = "brown", fall_winter = "blue"),
+                              domain = traj$season)
+  pal <- leaflet::colorFactor(
+               c(Jan = "cyan", Feb = "magenta", Mar = "grey60", Apr = "black",
+                 May = "sienna", Jun = "red", Jul = "olivedrab1",
+                 Aug = "white", Sep = "plum1", Oct = "forestgreen",
+                 Nov = "yellow", Dec = "blue"), domain = traj$month)
+
+
+  groups <- c("points", "path", "calib loc", "deploy loc", "season")
+  m <- traj %>%
+    dplyr::filter(src == "Deployment") %>%
+    leaflet::leaflet( width = "100%") %>%
+    leaflet::addTiles() %>%
+    leaflet::addMarkers(lng = cfg$calibLong, lat = cfg$calibLat,
+                        popup = "Calibration location", group = "calib loc") %>%
+    leaflet::addMarkers(lng = cfg$deplLong, lat = cfg$deplLat,
+                        popup = "Deployment location", group = "deploy loc") %>%
+    leaflet::setView(mean(na.omit(traj$lng)), mean(na.omit(traj$lat)), zoom = 5) %>%
+    # Monthly colored points
+    leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = 3,
+                              color = ~pal(month), label = ~tFirst,
+                              stroke = FALSE, fillOpacity = 0.75,
+                              group = "points") %>%
+    # Seasonally colored points
+    leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = 3,
+                              color = ~pal.season(season), label = ~tFirst,
+                              group = "season", stroke = FALSE, fillOpacity = 0.9) %>%
+    leaflet::hideGroup("season") %>%
+    leaflet::addLegend("bottomright", pal = pal.season, values = ~season,
+                       title = "Season") %>%
+    leaflet::addLegend("topleft", pal = pal, values = ~month, title = "Month") %>%
+    leaflet::addPolylines(data = points_to_line(traj, long = "lng", lat = "lat"),
+                          group = "path", weight = 1) %>%
+    leafem::addMouseCoordinates() %>%
+    leaflet::addLabelOnlyMarkers(lng = -62, lat = 53,
+                        label = htmltools::HTML(as.character(htmltools::h1(cfg$tagName))),
+                        labelOptions = leaflet::labelOptions(noHide = TRUE, textOnly = TRUE))
+
+  # Add smoothed points and path
+  if (cfg$boxcarSmooth){
+    groups <- c(groups, "smoothed", "smoothed path")
+    m <- m %>%
+      leaflet::addCircleMarkers(lng = ~smthlng, lat = ~smthlat, radius = 3,
+                          color = ~pal(month), label = ~tFirst,
+                          stroke = FALSE, fillOpacity = 0.75,
+                          group = "smoothed") %>%
+
+      leaflet::addPolylines(data = points_to_line(traj, long = "smthlng", lat = "smthlat"),
+                          group = "smoothed path", weight = 1) %>%
+      leaflet::hideGroup(c("smoothed", "smoothed path"))
+  }
+
+  # Map calibration points
+  if (cfg$keepCalibPoints){
+    groups <- c(groups, "calib pnts")
+    pnts <- dplyr::filter(traj, src == "Calib")
+    m <- m %>%
+      leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, data = pnts,
+                                radius = 1, color = "Black",
+                                label = ~tFirst, group = "calib pnts") %>%
+      leaflet::hideGroup("calib pnts")
+  }
+
+  # Map kernel UDs
+  if (cfg$createKernel) {
+    groups <- c(groups, "UDs")
+    ud.pal <- leaflet::colorFactor(palette = c("red", "yellow", "green"),
+                                   domain = factor(cont$level))
+
+    m <- m %>%
+      leaflet::addPolygons(data = cont, group = "UDs", color = ~ud.pal(level)) %>%
+      leaflet::addLegend("bottomright", pal = ud.pal, values = ~level,
+                         title = "UD %", data = cont@data)
+  }
+
+  m <- m %>%
+    leaflet::addLayersControl(overlayGroups = groups,
+                    options = leaflet::layersControlOptions(collapsed = FALSE))
+
+  # return map. NOTE you MUST return the map to the calling .Rmd for it to be properly rendered in the markdown output.
+  # You cannot print() it from here.
+  list(posns = shp, light = dat, calib = calib, cfg = cfg, map = m)
+}
+
+#'@export
+#'@title Create GLShelper folder structure
+#'
+#'@description blah
+#'
+#'@param root \[character]\cr Required. The root folder of your data analysis
+#'    project.
+#'
+#'@details GLSHelper is obnoxiously opinionated about the folder structure
+#'   containing your logger data and any generated outputs, shapefiles, etc.
+#'
+#'
+#'```
+#' -- root
+#'   |__Data
+#'     |__geolocation settings.csv
+#'     |__Tag data
+#'        |__MK3005 025
+#'          ...
+#'   |__GIS
+#'      |__Shapefiles
+#'      |__Images
+#'```
+#'
+#'   This function checks to see if sub-folders \code{Data, Data\\Tag Data, GIS,
+#'   GIS\\Shapefiles} and \code{GIS\\Images} exist and creates them if not.
+#'
+#' @return Nothing.
+#' @section Author: Dave Fifield
+#' @examples
+#'
+#' # Create folder structure in root of RStudio project
+#' create_GLSHelper_folders(here::here())
+create_GLSHelper_folders <- function(root = NULL) {
+  if (is.null(root)) stop("create_GLSHelper_folders: root is null, but is required!")
+
+  if (!dir.exists(root))
+    stop(sprintf("create_GLSHelper_folders: root folder '%s' does not exist.",
+                 root))
+
+  folders <- c(file.path(root, "Data"),
+               file.path(root, "Data/Tag data"),
+               file.path(root, "GIS"),
+               file.path(root, "GIS/Shapefiles"),
+               file.path(root, "GIS/Images"))
+
+  folders %>%
+    purrr::walk(function(folder){
+        if (!dir.exists(folder)) {
+          message(sprintf("Creating folder '%s'", folder))
+          dir.create(folder)
+        }
+    }
+  )
+}
+
+
+## Used to create the folder tree structure for documentation
+## create_GLSHelper_folders()
+##
+## Taken from https://gist.github.com/jennybc/2bf1dbe6eb1f261dfe60
+##
+## quick-and-dirty ersatz Unix tree command in R
+## inspired by this one-liner:
+## ls -R | grep ":$" | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/   /' -e 's/-/|/'
+## found here (among many other places):
+## http://serverfault.com/questions/143954/how-to-generate-an-ascii-representation-of-a-unix-file-hierarchy
+twee <- function(path = getwd(), level = Inf) {
+
+  fad <-
+    list.files(path = path, recursive = TRUE,no.. = TRUE, include.dirs = TRUE)
+
+  fad_split_up <- strsplit(fad, "/")
+
+  too_deep <- lapply(fad_split_up, length) > level
+  fad_split_up[too_deep] <- NULL
+
+  jfun <- function(x) {
+    n <- length(x)
+    if(n > 1)
+      x[n - 1] <- "|__"
+    if(n > 2)
+      x[1:(n - 2)] <- "   "
+    x <- if(n == 1) c("-- ", x) else c("   ", x)
+    x
+  }
+  fad_subbed_out <- lapply(fad_split_up, jfun)
+
+  cat(unlist(lapply(fad_subbed_out, paste, collapse = "")), sep = "\n")
+}
+
+# Modified from original by Carl Witthoft.
+# Modified from original by Carl Witthoft.
+# use bfunc to specify what function to apply to the windowed
+# region.
+# basically must be valid function name and must accept
+# single value or vector of values
+# "pad" generates partial-width values at ends of x so output is
+# same length as input.
+# and make it optional for picky people
+boxcar <- function(x, width = 5, bfunc = 'mean', pad = TRUE, anchor.ends = TRUE, ...){
+  goodfunc <- try(bfunc <- get(bfunc), silent = TRUE)
+  if (inherits(goodfunc,"try-error")) {
+    stop('"', bfunc, '"', ' is not a known function', call. = FALSE)
+  }
+
+  # paranoid, force width to be integer
+  width <- floor(width)
+
+  # fix width given definition of window() inputs
+  width <- max(0,(width - 1))
+
+  if (width %% 2 == 1) cat('Warning: window is even length, hence asymmetric\n')
+
+  #adjust start, end points to half-window width; keep output length right
+  seqstart <- 1 - as.numeric(pad)*((width + 1) %/% 2)
+  seqend <- length(x) - width + as.numeric(pad) * (width %/% 2)
+
+  # cat(paste("seqstart: ", seqstart, " seqend: ", seqend, "\n", sep = ""))
+  # flush.console()
+
+  if (seqend < seqstart) {
+    stop(' input sequence is to short for that width', call. = FALSE)
+  }
+
+  boxout <- mapply(
+    function(shiftx, anchor.ends) {
+      #      cat(paste("Anchor.ends = ", anchor.ends, "\n"))
+      win <- window(x,max(shiftx,1), min(shiftx + width,length(x)))
+      n.extras <- 0
+      if (pad) {
+        n.extras <- width - length(win) + 1
+        if (shiftx < 1) {
+          #win <- c(rep(NA, n.extras), win)
+          win <- c(rep(win[1], n.extras), win)
+        } else {
+          # win <- c(win, rep(NA, n.extras))
+          win <- c(win, rep(win[length(win)], n.extras))
+        }
+      }
+      # Debugging
+      #      cat(paste("\t seq: ", shiftx, " win: "))
+      #      cat(win)
+      #      cat(" n.extras: ", n.extras, "\n")
+
+      # XXXXX this is only sensible if pad is also true
+      # if anchor.ends is True then do not move the position of the first and last positions
+      if (pad & anchor.ends) {
+        if (shiftx == seqstart) {
+          res <- win[1]           # were doing the first position - just return it
+        } else if (shiftx == seqend) {
+          res <- win[length(win)] # were doint the last position - just return it
+        } else {
+          res <- bfunc(win, ...)  # were doing an interior position - apply bfunc
+        }
+      } else {# no pad and/or anchor, just do bfunc
+        res <- bfunc(win, ...)
+      }
+      return(res)
+    }, seq(seqstart, seqend), MoreArgs = list(anchor.ends)
+  )
+
+  return(boxout)
+}
+
+
+
+# Taken from here: https://rpubs.com/walkerke/points_to_line
+points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) {
+
+  # Convert to SpatialPointsDataFrame
+  sp::coordinates(data) <- c(long, lat)
+
+  # If there is a sort field...
+  if (!is.null(sort_field)) {
+    if (!is.null(id_field)) {
+      data <- data[order(data[[id_field]], data[[sort_field]]), ]
+    } else {
+      data <- data[order(data[[sort_field]]), ]
+    }
+  }
+
+  # If there is only one path...
+  if (is.null(id_field)) {
+
+    lines <- sp::SpatialLines(list(sp::Lines(list(sp::Line(data)), "id")))
+
+    return(lines)
+
+    # Now, if we have multiple lines...
+  } else if (!is.null(id_field)) {
+
+    # Split into a list by ID field
+    paths <- sp::split(data, data[[id_field]])
+
+    sp_lines <- sp::SpatialLines(list(sp::Lines(list(sp::Line(paths[[1]])), "line1")))
+
+    # I like for loops, what can I say...
+    for (p in 2:length(paths)) {
+      id <- paste0("line", as.character(p))
+      l <- sp::SpatialLines(list(sp::Lines(list(sp::Line(paths[[p]])), id)))
+      sp_lines <- maptools::spRbind(sp_lines, l)
+    }
+
+    return(sp_lines)
+  }
+}
