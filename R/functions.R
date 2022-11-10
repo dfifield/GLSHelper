@@ -110,18 +110,9 @@ do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL)
 
   cfgs %>%
     split(1:nrow(.)) %>%
-    # purrr::map(do.geo.catch, folder = folder, elev = elev, shapefolder = shapefolder) %>%
     purrr::map(do_geolocation, folder = folder, elev = elev,
                shapefolder = shapefolder) %>%
     purrr::set_names(cfgs$tagName)
-}
-
-do.geo.catch <- function(cfg, folder, elev, shapefolder) {
-  tryCatch(do_geolocation(cfg = cfg, folder = folder, elev = elev, shapefolder = shapefolder),
-                  error = function(e) {
-                    message(sprintf("\n\nERROR:An error occured during process of %s: '%s",
-                                    cfg$tagName, e))
-                  })
 }
 
 #'@export
