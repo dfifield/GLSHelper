@@ -18,6 +18,11 @@
 #'@param shapefolder \[character]\cr optional. The full pathname to a folder
 #'    where shapefiles will be stored (if requested),
 #'
+#' @param subset \[character]\cr Optional. A character vector of tag names to
+#'    include. These must matche the \code{tagName} column in the configuration
+#'    file. This argument overrides the value of the \code{include} column
+#'    in the configuration file.
+#'
 #'@details This function is a wrapper for \code{\link{do_geolocation()}}. It
 #'    reads the config file specified by \code{folder} and \code{file} and
 #'    calls \code{do.geolocation} repeatedly - once for each data set.
@@ -28,9 +33,10 @@
 #'@return Nothing.
 #'@section Author: Dave Fifield
 
-do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL) {
+do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
+                               subset = NULL) {
   cfgs <- readr::read_csv(cfgfile,
-          col_types = #"ccddlDDlDDlDDlDDTTdddllllllllcdlcllldlddddllccllccdccd"
+          col_types =
     readr::cols( tagName =  "c",
       include = "l",
       lightFile	 =  "c",
@@ -57,7 +63,7 @@ do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL)
       calibEnd	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
       calibLat	 =  "d",
       calibLong	 =  "d",
-      elev_offset	 =  "d",
+      elev =  "d",
       keepCalibPoints	 =  "l",
       loadLight	 =  "l",
       loadCalib	 =  "l",
@@ -108,10 +114,12 @@ do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL)
            ) %>%
     dplyr::arrange(tagName)
 
+  if (!is.null(subset))
+    cfgs %<>% dplyr::filter(tagName %in% subset)
+
   cfgs %>%
     split(1:nrow(.)) %>%
-    purrr::map(do_geolocation, folder = folder, elev = elev,
-               shapefolder = shapefolder) %>%
+    purrr::map(do_geolocation, folder = folder, shapefolder = shapefolder) %>%
     purrr::set_names(cfgs$tagName)
 }
 
@@ -128,9 +136,6 @@ do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL)
 #'    the tag data stored in separate sub-folders for each tag. The name of
 #'    each sub-folder must match the \code{cfg$tagName}.
 #'
-#'@param elev \[character]\cr Required. elevation angle to use, omit to use
-#'    elevation angle specified in \code{cfg}.
-#'
 #'@param shapefolder \[character]\cr optional. The full pathname to a folder
 #'    where shapefiles will be stored (if requested),
 #'
@@ -140,7 +145,7 @@ do_all_geolocation <- function(folder, cfgfile, elev = NULL, shapefolder = NULL)
 #'
 #'@return Nothing.
 #'@section Author: Dave Fifield
-do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
+do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   message(sprintf("\n\nProcessing tag %s", cfg$tagName))
 
   tagDir <- file.path(folder, cfg$tagName)
@@ -153,10 +158,29 @@ do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
   colNames <- unlist(strsplit(cfg$colNames, split = ","))
   pcts <- as.numeric(unlist(strsplit(cfg$pcts, split = ",")))
 
-  # read data, implicitly assumes first row is headers
+  # read light data, implicitly assumes first row is headers
   # (it is some stuff for BAS loggers which gets ignored)
+  message("Reading light data")
   alldat <- read.csv(file.path(tagDir, cfg$lightFile))
   names(alldat) <- colNames
+
+  # read activity data if it exists
+  actfile <- file.path(tagDir, sub("lig$", "act", cfg$lightFile))
+  if (file.exists(actfile)) {
+    message("Reading activity data")
+    act <- readr::read_csv(actfile, skip = 1, col_names = FALSE,
+          col_types = c("ccdi")) %>%
+      purrr::set_names(c("status", "datetime", "datesec", "act")) %>%
+      dplyr::mutate(datetime = as.POSIXct(strptime(datetime,
+                            format = "%d/%m/%y %H:%M:%S")))
+          # readr::cols(status =  "c",
+          #           datetime = readr::col_datetime(format = "%d/%m/%y %H:%M"),
+          #           datesec = "d",
+          #           act = "i"))
+  } else {
+    message("No activity data found, skipping.")
+    act <- NULL
+  }
 
   # create POSIXct date
   alldat$date <- as.POSIXct(strptime(as.character(alldat$datetime), format = "%d/%m/%y %H:%M:%S", tz = "UTC"))
@@ -178,16 +202,14 @@ do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
   }
 
   # if no default elev given
-  if (is.null(elev)) {
+  if (is.na(cfg$elev)) {
     elev <- with(calibtwi, GeoLight::getElevation(tFirst, tSecond, type,
                                   known.coord = calibLoc))
+    message(sprintf("Elevation angle calculated from calibration period: %.2f", elev))
+  } else {
+    elev = cfg$elev
+    message(sprintf("Elevation angle set from config file: %.2f", elev))
   }
-  message(sprintf("Elevation angle calculated from calibration period: %.2f", elev))
-
-  # add offset to elevation angle
-  elev <- ifelse(is.na(cfg$elev_offset), elev, elev + cfg$elev_offset)
-  message(sprintf("Final elevation angle including offset of %.2f: %.2f",
-                  cfg$elev_offset, elev))
 
   # keep calibration points?
   if (cfg$keepCalibPoints) {
@@ -305,8 +327,7 @@ do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
   # create shapefile
   if (cfg$createShapefile) {
     filename <- paste(cfg$tagName, "thr", cfg$lThresh, "elev", round(elev, 2),
-                  ifelse(cfg$doWinterOnly, "wint", ""),
-                  ifelse(cfg$boxcarSmooth, "smooth2", ""), "R", sep = "_")
+                  ifelse(cfg$boxcarSmooth, "smooth2", ""), sep = "_")
     message(sprintf("\nCreating shapefile: %s\n", filename))
     rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
                     driver = "ESRI Shapefile", overwrite_layer = T)
@@ -367,9 +388,10 @@ do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
     leaflet::leaflet( width = "100%") %>%
     leaflet::addTiles() %>%
     leaflet::addMarkers(lng = cfg$calibLong, lat = cfg$calibLat,
-                        popup = "Calibration location", group = "calib loc") %>%
+                        label = "Calibration location", group = "calib loc") %>%
     leaflet::addMarkers(lng = cfg$deplLong, lat = cfg$deplLat,
-                        popup = "Deployment location", group = "deploy loc") %>%
+                        label = "Deployment location",
+                        group = "deploy loc") %>%
     leaflet::setView(mean(na.omit(traj$lng)), mean(na.omit(traj$lat)), zoom = 5) %>%
     # Monthly colored points
     leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = 3,
@@ -432,9 +454,10 @@ do_geolocation <- function(cfg, folder, elev = NULL, shapefolder = NULL) {
     leaflet::addLayersControl(overlayGroups = groups,
                     options = leaflet::layersControlOptions(collapsed = FALSE))
 
+  htmltools::tagList(m)
   # return map. NOTE you MUST return the map to the calling .Rmd for it to be properly rendered in the markdown output.
   # You cannot print() it from here.
-  list(posns = shp, light = dat, calib = calib, cfg = cfg, map = m)
+  list(posns = shp, light = dat, act = act, calib = calib, cfg = cfg, map = m)
 }
 
 #'@export
@@ -643,4 +666,35 @@ points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) 
 
     return(sp_lines)
   }
+}
+
+
+
+#'@export
+#'@title Plot activity data
+#'
+#'@description Plot activity data as measured by wet/dry switch
+#'
+#'@param dat \[dataframe]\cr Required. A dataframe containing columns
+#'    \code{datetime} and \code{act}.
+#'
+#'@param maxact \[numeric]\cr optional - default 200. The maximum value \code{act} can take.
+#'    Used to scale the y axis of the plot in %.
+#'
+#'@details This function takes the activity data from the wet-dry sensor and
+#'     plots time on the x-axis and percentage wet per interval on the y-axis.
+#'     The length of the interval is computed as the time between the first two
+#'     points in the activity series. This interval is simply used to label the
+#'     y-axis.
+#'
+#' @return The \code{ggplot} invisibly.
+#' @section Author: Dave Fifield
+#'
+plot_activity <- function(dat, maxact = 200) {
+  int <- dat$datetime[2] - dat$datetime[1] # time between measures
+  p <- ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100)) +
+    ggplot2::geom_point(size = 0.1) +
+    ggplot2::ylab(sprintf("Percent wet (per %d min)", as.integer(int)))
+  print(p)
+  invisible(p)
 }

@@ -4,7 +4,7 @@
 \alias{do_geolocation}
 \title{Do geolocation for one GLS data set}
 \usage{
-do_geolocation(cfg, folder, elev = NULL)
+do_geolocation(cfg, folder, shapefolder = NULL)
 }
 \arguments{
 \item{cfg}{[character]\cr Required. A dataframe of configuration information
@@ -14,8 +14,8 @@ to control the processing.}
 the tag data stored in separate sub-folders for each tag. The name of
 each sub-folder must match the \code{cfg$tagName}.}
 
-\item{elev}{[character]\cr Required. elevation angle to use, omit to use
-elevation angle specified in \code{cfg}.}
+\item{shapefolder}{[character]\cr optional. The full pathname to a folder
+where shapefiles will be stored (if requested),}
 }
 \value{
 Nothing.
