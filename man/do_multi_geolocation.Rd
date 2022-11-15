@@ -21,21 +21,23 @@ be processed. See \code{\link{do_geolocation}} for details.}
 where shapefiles will be stored (if requested),}
 
 \item{subset}{[character]\cr Optional. A character vector of tag names to
-include. These must matche the \code{tagName} column in the configuration
+include. These must match the \code{tagName} column in the configuration
 file. This argument overrides the value of the \code{include} column
 in the configuration file.}
 }
 \value{
-Nothing.
+A list which each element being the return value of
+\code{\link{do_geolocation}}.
 }
 \description{
 Process multiple GLS logger raw light data sets according to
 settings given in a configuration CSV file.
 }
 \details{
-This function is a wrapper for \code{\link{do_geolocation()}}. It
-reads the config file specified by \code{folder} and \code{file} and
-calls \code{do.geolocation} repeatedly - once for each data set.
+This function
+reads the config file specified by \code{cfgfile} - each row
+specifies the settings for one dataset to process.  It then
+calls \url{do.geolocation} repeatedly - once for each data set.
 
 There are quite strict naming conventions for subfolders, light files, etc.
 See \code{\link{create_GLSHelper_folders}} for details.

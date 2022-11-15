@@ -1,36 +1,39 @@
 
-#'@export
-#'@title Do geolocation for multiple GLS data sets
+#' @export
+#' @title Do geolocation for multiple GLS data sets
 #'
-#'@description Process multiple GLS logger raw light data sets according to
+#' @description Process multiple GLS logger raw light data sets according to
 #'    settings given in a configuration CSV file.
 #'
-#'@param folder \[character]\cr Required. The name of a folder which contains
+#' @param folder \[character]\cr Required. The name of a folder which contains
 #'   the GLS light data for one or more devices. The light data for each device
 #'   must be in a separate sub-folder of \code{folder}. The name of each
 #'   sub-folder must match the \code{tagName} column of the config file. See
 #'   the \code{file} parameter.
 #'
-#'@param cfgfile \[character]\cr Required. The full pathname of a CSV configuration
+#' @param cfgfile \[character]\cr Required. The full pathname of a CSV configuration
 #'    file. This file contains one line per GLS data set to
 #'    be processed. See \code{\link{do_geolocation}} for details.
 #'
-#'@param shapefolder \[character]\cr optional. The full pathname to a folder
+#' @param shapefolder \[character]\cr optional. The full pathname to a folder
 #'    where shapefiles will be stored (if requested),
 #'
 #' @param subset \[character]\cr Optional. A character vector of tag names to
-#'    include. These must matche the \code{tagName} column in the configuration
+#'    include. These must match the \code{tagName} column in the configuration
 #'    file. This argument overrides the value of the \code{include} column
 #'    in the configuration file.
 #'
-#'@details This function is a wrapper for \code{\link{do_geolocation()}}. It
-#'    reads the config file specified by \code{folder} and \code{file} and
-#'    calls \code{do.geolocation} repeatedly - once for each data set.
+#'@details This function
+#'    reads the config file specified by \code{cfgfile} - each row
+#'    specifies the settings for one dataset to process.  It then
+#'    calls [do.geolocation] repeatedly - once for each data set.
 #'
 #'    There are quite strict naming conventions for subfolders, light files, etc.
 #'    See \code{\link{create_GLSHelper_folders}} for details.
 #'
-#'@return Nothing.
+#'@return A list which each element being the return value of
+#'    \code{\link{do_geolocation}}.
+#'
 #'@section Author: Dave Fifield
 
 do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
@@ -49,9 +52,6 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       removeSpringEqui	 =  "l",
       springEquiStart	 =  readr::col_date(),
       springEquiEnd	 =  readr::col_date(),
-      doWinterOnly	 =  "l",
-      wintStart	 =  readr::col_date(),
-      wintEnd	 =  readr::col_date(),
       doDateFilter	 =  "l",
       filterStart = readr::col_date(),
       filterEnd = readr::col_date(),
@@ -85,7 +85,6 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       minY	 =  "d",
       maxY	 =  "d",
       doStatPeriods	 =  "l",
-      doTripMap	 =  "l",
       Xlim	 =  "c",
       Ylim	 =  "c",
       createKernel	 =  "l",
@@ -95,7 +94,8 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       h	 =  "d",
       unin	 =  "c",
       unout =  "c",
-      grid =  "d")
+      grid =  "d",
+      plot_map = "l")
     ) %>%
     dplyr::filter(include == TRUE) %>%
     # remove rows that are all NA, Excel likes to insert these.
@@ -104,8 +104,6 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
              fallEquiEnd = as.POSIXct(fallEquiEnd),
              springEquiStart = as.POSIXct(springEquiStart),
              springEquiEnd = as.POSIXct(springEquiEnd),
-             wintStart = as.POSIXct(wintStart),
-             wintEnd = as.POSIXct(wintEnd),
              deplStart = as.POSIXct(deplStart),
              deplEnd = as.POSIXct(deplEnd),
              filterStart = as.POSIXct(filterStart),
@@ -137,13 +135,32 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
 #'    each sub-folder must match the \code{cfg$tagName}.
 #'
 #'@param shapefolder \[character]\cr optional. The full pathname to a folder
-#'    where shapefiles will be stored (if requested),
+#'    where shapefiles will be stored (if requested).
 #'
 #'@details The details
 #'
 #'    There are quite strict naming conventions for subfolders, light files, etc.
 #'
-#'@return Nothing.
+#'@return A list containing:
+#' \itemize{
+#'  \item{posns - \[dataframe] the computed positions, with columns:}
+#'  \itemize{
+#'      \item{\code{tFirst, tSecond, type} - see \code{\link[GeoLight]{twilightCalc} for info.}}
+#'      \item{\code{src} - the source of the position, either \code{"Calib"} for
+#'         calibration period or \code{"Deployment"} for deployment period.}
+#'      \item{\code{lng, lat} - the longitude and latitude.}
+#'      \item{\code{smthlng, smthlat} - the smoothed longitude and latitude, if
+#'          requested.}
+#'  }
+#'  \item{\code{light} - \[numeric] the sun elevation angle used in the
+#'      calculation of positions.
+#'  \item{\code{light} - \[dataframe] the raw light data after applying optional date
+#'     filtering. See xxxconfig_format.}
+#'  \item{\code{act} - \[dataframe] the activity data.}
+#'  \item{\code{calib} - \[dataframe] the raw light data during calibration.}
+#'  \item{\code{cfg} - \[dataframe] the config settings used.}
+#'  \item{\code{m} - a Leaflet map.}
+#' }
 #'@section Author: Dave Fifield
 do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   message(sprintf("\n\nProcessing tag %s", cfg$tagName))
@@ -171,12 +188,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     act <- readr::read_csv(actfile, skip = 1, col_names = FALSE,
           col_types = c("ccdi")) %>%
       purrr::set_names(c("status", "datetime", "datesec", "act")) %>%
-      dplyr::mutate(datetime = as.POSIXct(strptime(datetime,
-                            format = "%d/%m/%y %H:%M:%S")))
-          # readr::cols(status =  "c",
-          #           datetime = readr::col_datetime(format = "%d/%m/%y %H:%M"),
-          #           datesec = "d",
-          #           act = "i"))
+      dplyr::mutate(datetime = lubridate::dmy_hms(datetime))
   } else {
     message("No activity data found, skipping.")
     act <- NULL
@@ -215,6 +227,8 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   if (cfg$keepCalibPoints) {
     calibCoord <- GeoLight::coord(calibtwi$tFirst, calibtwi$tSecond,
                                   calibtwi$type, degElevation = elev)
+    calibPoints <- cbind(calibtwi, calibCoord) %>%
+      purrr::set_names(c(names(calibtwi), c("lng", "lat")))
   }
 
   dat <- alldat
@@ -232,11 +246,6 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   # remove fall Equinox
   if (cfg$removeFallEqui) {
     dat <- dplyr::filter(dat, date <= cfg$fallEquiStart | date >= cfg$fallEquiEnd)
-  }
-
-  # only extract winter?
-  if (cfg$doWinterOnly) {
-    dat <- dplyr::filter(dat, date >= cfg$wintStart & date <= cfg$wintEnd)
   }
 
   # get dawn and dusk times for deployment
@@ -278,21 +287,6 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     }
   }
 
-  # smoothing - currently smooths twice - Should add an option to choose how many times to smooth
-  if (cfg$boxcarSmooth) {
-    smth <- coord
-    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    traj <- cbind(twi, coord, smth)
-    names(traj) <- c(names(twi), c("lng", "lat"), c("smthlng", "smthlat"))
-  } else {
-    # create a trajectory df and map it
-    traj <- cbind(twi, coord)
-    names(traj) <- c(names(twi), c("lng", "lat"))
-  }
-
   # get stationary periods?
   if (cfg$doStatPeriods) {
     site <- GeoLight::changeLight(twi$tFirst, twi$tSecond, twi$type,
@@ -300,79 +294,64 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     GeoLight::siteMap(coord, site, xlim = Xlim, ylim = Ylim)
   }
 
-  # map it
-  if (cfg$doTripMap) {
-    GeoLight::tripMap(coord, xlim = Xlim, ylim = Ylim)
-  }
-
-
-  # combined calibration data in with deployment data
-  if (cfg$keepCalibPoints) {
-    traj <- rbind(cbind(calibtwi, calibCoord), traj)
-  }
-
-  # create months and filter positions that are NA
-  traj %<>%
-    dplyr::mutate(month = factor(format(traj$tFirst, "%b"),
-      levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")),
-    ) %>%
+  # create trajectory
+  traj <- cbind(twi, coord) %>%
+    purrr::set_names(c(names(twi), c("lng", "lat"))) %>%
     dplyr::filter(!is.na(lat))
 
-  # create spatialpointsdataframe
-  shp <- sp::SpatialPointsDataFrame(cbind(traj$lng, traj$lat), data = traj,
-                                    proj4string = sp::CRS("+proj=longlat"))
-  shp$month <- as.integer(shp$month)
+  # smoothing - currently smooths twice - Should add an option to choose how many times to smooth
+  if (cfg$boxcarSmooth) {
+    smth <- coord
+    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    traj <- cbind(traj, smth) %>%
+      purrr::set_names(c(names(traj), c("smthlng", "smthlat")))
 
-  # create shapefile
-  if (cfg$createShapefile) {
-    filename <- paste(cfg$tagName, "thr", cfg$lThresh, "elev", round(elev, 2),
-                  ifelse(cfg$boxcarSmooth, "smooth2", ""), sep = "_")
-    message(sprintf("\nCreating shapefile: %s\n", filename))
-    rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
-                    driver = "ESRI Shapefile", overwrite_layer = T)
-  }
-
-  if (cfg$createKernel) {
-    # Create kernel density surface for all dateranges (for selected animals),
-    # potentially doing multiple animal kernels for each date range.
-    #kerns <- Get.kernels(points = shp, projString = projString, h = h, grid = grid)
-    kerns <- Get.kernels(points = shp, projString = cfg$projString, h = cfg$h,
-                         grid = cfg$grid)
-
-    ######################### generate volume contours ###############################
-    #
-    # Generate all the required volume contours for each date range and data
-    # subset (based on IDField) in kerns.
-    # conts is a 3 level list with
-    # level 1 = date ranges
-    #   level 2 = data subsets (based on IDField)
-    #     level 3 = volume percentage levels
-    conts <- Get.contours(kerns = kerns, pcts = pcts, unin = cfg$unin,
-                          unout = cfg$unout)
-    cont <- conts[[1]][[1]]
-
-    # convert back to lat long for plotting
-    cont <- sp::spTransform(x = cont, CRSobj = sp::CRS("+proj=longlat +ellps=WGS84"))
-
-    # Save volume contours, if requested
-    if (cfg$createKernelShapefile) {
-      writeContoursShapefiles(conts, shapefolder,
-                              paste0(cfg$tagName, "_kern_", pcts), overwrite_layer = T)
+    # combine calibration data in with deployment data?
+    if (cfg$keepCalibPoints) {
+      traj <- calibPoints %>%
+        dplyr::mutate(smthlng = lng,
+               smthlat = lat) %>%
+        rbind(traj)
     }
+
+    lngcol <- "smthlng"
+    latcol <- "smthlat"
+  } else {
+
+    # combine calibration data in with deployment data?
+    if (cfg$keepCalibPoints) {
+      traj <- rbind(traj, calibPoints)
+    }
+
+    lngcol <- "lng"
+    latcol <- "lat"
   }
 
-  # create seasons for mapping before/after equinoxes
+  # Create shapefile
+  if (cfg$createShapefile)
+    do_shapefile(traj, lngcol = lngcol, latcol = latcol, elev = elev, cfg = cfg,
+                 shapefolder = shapefolder)
+
+  # create seasons for mapping before/after equinoxes and also add month
   fallequi <- lubridate::ymd(paste(lubridate::year(cfg$fallEquiStart), 9, 21,
                                    sep = "-"))
   sprequi <- lubridate::ymd(paste(lubridate::year(cfg$springEquiStart), 3, 21,
                                   sep = "-"))
+
+  # Augment traj with month and season
   traj <- traj %>%
+    dplyr::mutate(month = factor(format(tFirst, "%b"),
+                          levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))) %>%
     dplyr::mutate(season = dplyr::case_when(
       tFirst <= fallequi | tFirst >= sprequi ~ "spring_summer",
       tFirst > fallequi & tFirst < sprequi ~ "fall_winter",
       TRUE ~ NA_character_))
 
+  # Create palettes
   pal.season <- leaflet::colorFactor(c(spring_summer = "brown", fall_winter = "blue"),
                               domain = traj$season)
   pal <- leaflet::colorFactor(
@@ -382,6 +361,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
                  Nov = "yellow", Dec = "blue"), domain = traj$month)
 
 
+  # Create map
   groups <- c("points", "path", "calib loc", "deploy loc", "season")
   m <- traj %>%
     dplyr::filter(src == "Deployment") %>%
@@ -415,16 +395,16 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # Add smoothed points and path
   if (cfg$boxcarSmooth){
-    groups <- c(groups, "smoothed", "smoothed path")
+    groups <- c(groups, "smoothed pnts", "smoothed path")
     m <- m %>%
       leaflet::addCircleMarkers(lng = ~smthlng, lat = ~smthlat, radius = 3,
                           color = ~pal(month), label = ~tFirst,
                           stroke = FALSE, fillOpacity = 0.75,
-                          group = "smoothed") %>%
+                          group = "smoothed pnts") %>%
 
       leaflet::addPolylines(data = points_to_line(traj, long = "smthlng", lat = "smthlat"),
                           group = "smoothed path", weight = 1) %>%
-      leaflet::hideGroup(c("smoothed", "smoothed path"))
+      leaflet::hideGroup(c("smoothed pnts", "smoothed path"))
   }
 
   # Map calibration points
@@ -438,27 +418,125 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
       leaflet::hideGroup("calib pnts")
   }
 
-  # Map kernel UDs
+  # Create and map kernel UDs
   if (cfg$createKernel) {
-    groups <- c(groups, "UDs")
-    ud.pal <- leaflet::colorFactor(palette = c("red", "yellow", "green"),
-                                   domain = factor(cont$level))
 
-    m <- m %>%
-      leaflet::addPolygons(data = cont, group = "UDs", color = ~ud.pal(level)) %>%
-      leaflet::addLegend("bottomright", pal = ud.pal, values = ~level,
-                         title = "UD %", data = cont@data)
+    # create kernel UDSs and convert back to lat long for plotting
+    conts <- suppressWarnings(do_kernel(traj, lngcol = lngcol, latcol = latcol, elev = elev, cfg,
+                       shapefolder = shapefolder)) %>%
+      purrr::map(~sp::spTransform(., CRSobj = sp::CRS("+proj=longlat +ellps=WGS84")))
+
+
+    groups <- c(groups, "UDs")
+    ud.pal <- leaflet::colorFactor(palette = "RdYlBu",
+                                   domain = factor(names(conts)))
+
+    # Add kernel UD contours to map
+    for(i in 1:length(conts)) {
+      m <- leaflet::addPolygons(m, data = conts[[i]], group = "UDs",
+                                color = ~ud.pal(names(conts)[i]),
+                                opacity = 0.75)
+    }
+    m <- leaflet::addLegend(m, "bottomleft", pal = ud.pal, values = names(conts),
+                       title = "UD %")
   }
 
-  m <- m %>%
-    leaflet::addLayersControl(overlayGroups = groups,
+  m <- leaflet::addLayersControl(m, overlayGroups = groups,
                     options = leaflet::layersControlOptions(collapsed = FALSE))
 
-  htmltools::tagList(m)
-  # return map. NOTE you MUST return the map to the calling .Rmd for it to be properly rendered in the markdown output.
-  # You cannot print() it from here.
-  list(posns = shp, light = dat, act = act, calib = calib, cfg = cfg, map = m)
+  if (cfg$plot_map) {
+    if (isTRUE(getOption('knitr.in.progress'))) {
+        print(htmltools::tagList(m))
+      } else {
+        print(m)
+    }
+  }
+
+  list(posns = traj, elev = elev, light = dat, act = act, calib = calib, cfg = cfg, map = m)
 }
+
+do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
+  # create spatialpointsdataframe
+  shp <- sp::SpatialPointsDataFrame(cbind(dat[, lngcol], dat[, latcol]),
+                                    data = dat,
+                                    proj4string = sp::CRS("+proj=longlat"))
+
+  # create shapefile
+  if (cfg$createShapefile) {
+    filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
+                  ifelse(cfg$boxcarSmooth, "_smooth2", ""))
+    message(sprintf("\nCreating shapefile: %s\n", filename))
+    rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
+                    driver = "ESRI Shapefile", overwrite_layer = T)
+  }
+  shp
+}
+
+
+# Create kernel UDs for the given percentage levels, excluding calibration
+# points.
+do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
+  # exclude calib points and create IDcolumn to make kernelUD() happy
+  dat <- dat %>%
+    dplyr::filter(src != "Calib") %>%
+    dplyr::mutate(id = 1)
+
+  # Create a projection string assuming a lamber conic is good.
+  # Longitude of center is mean of dat longitudes,
+  # Latitudes of two standard parallells are 1/6 and 5/6 of
+  # the latitudinal range of data.
+  # See https://gis.stackexchange.com/questions/257153/lambert-conformal-conic-one-standard-parallel-choosing-latitude-of-origin-s
+  if (is.na(cfg$projString)) {
+    lats <- dat[, latcol]
+    span <- (range(lats) - min(lats))[2]
+    lat1 <- min(lats) + (span/6)
+    lat2 <- min(lats) + ((5/6) * span)
+
+    prjString <- paste0("+proj=lcc +lon_0=", mean(dat[, lngcol]),
+                      " +lat_1=", lat1, "+lat_2=", lat2, " +ellps=GRS80")
+  } else {
+    prjString <- cfg$projString
+  }
+
+  shp <- sp::SpatialPointsDataFrame(cbind(dat[, lngcol], dat[, latcol]),
+                                    data = dat,
+                                    proj4string = sp::CRS("+proj=longlat")) %>%
+    sp::spTransform(sp::CRS(prjString))
+
+  # kernelUD only wants 1 single animal ID column
+  shp@data <- dplyr::select(dat, id)
+  kern <- adehabitatHR::kernelUD(shp, h = cfg$h, grid = cfg$grid)
+
+
+  # create a vector of percents
+  pcts <- cfg$pcts %>%
+    strsplit(",") %>%
+    unlist()
+
+  # Generate volume contours
+  conts <- pcts %>%
+    purrr::map(~ adehabitatHR::getverticeshr(kern, percent = ., unin = cfg$unin, unout = cfg$unout)) %>%
+    purrr::set_names(pcts)
+
+
+  # Save volume contours, if requested
+  if (cfg$createKernelShapefile) {
+    purrr::imap(conts, create_kernel_shapefile, cfg = cfg, elev = elev,
+         shapefolder = shapefolder)
+  }
+
+  conts
+}
+
+create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
+  filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
+                ifelse(cfg$boxcarSmooth, "_smooth2", ""),
+                "_UD_", pct)
+  message(sprintf("Creating UD shapefile: %s\n", filename))
+  rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
+                  driver = "ESRI Shapefile", overwrite_layer = T)
+}
+
 
 #'@export
 #'@title Create GLShelper folder structure
@@ -678,7 +756,11 @@ points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) 
 #'@param dat \[dataframe]\cr Required. A dataframe containing columns
 #'    \code{datetime} and \code{act}.
 #'
-#'@param maxact \[numeric]\cr optional - default 200. The maximum value \code{act} can take.
+#'@param type \[character]\cr Optional. The type of plot to produce: point ("p"),
+#'    line ("l"), or both ("b"). Plots with lines tend to be very crowded,
+#'    so it's helpful to convert the resulting plot to \code{plotly} and zoom in.
+#'
+#'@param maxact \[numeric]\cr Optional - default 200. The maximum value \code{act} can take.
 #'    Used to scale the y axis of the plot in %.
 #'
 #'@details This function takes the activity data from the wet-dry sensor and
@@ -689,12 +771,36 @@ points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) 
 #'
 #' @return The \code{ggplot} invisibly.
 #' @section Author: Dave Fifield
+#' @examples
 #'
-plot_activity <- function(dat, maxact = 200) {
+#' res <- do_multi_geolocation(folder = here::here("Data/Tag data"),
+#'                        cfgfile = here::here("Data/geolocation settings.csv"),
+#'                        shapefolder = here::here("GIS/Shapefiles"),
+#'                        subset = c("C4567"))
+#'
+#' # Point plot
+#' p <- plot_activity(res$C4567$act)
+#' p
+#'
+#' # Line and point plot
+#' p <- plot_activity(res$C4567$act, type = "b")
+#' p
+#' library(plotly)
+#' pl <- ggplotly(p)
+#' pl
+#'
+plot_activity <- function(dat, type = c("p", "l", "b"), maxact = 200) {
+  type = match.arg(type)
   int <- dat$datetime[2] - dat$datetime[1] # time between measures
-  p <- ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100)) +
-    ggplot2::geom_point(size = 0.1) +
-    ggplot2::ylab(sprintf("Percent wet (per %d min)", as.integer(int)))
+  p <- switch(type,
+      p = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
+            ggplot2::geom_point(size = 0.1),
+      l = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
+            ggplot2::geom_line(),
+      b = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
+            ggplot2::geom_point(size = 0.1) + ggplot2::geom_line()
+    )
+  p <- p + ggplot2::ylab(sprintf("Percent wet (per %d min)", as.integer(int)))
   print(p)
   invisible(p)
 }

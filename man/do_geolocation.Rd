@@ -15,10 +15,27 @@ the tag data stored in separate sub-folders for each tag. The name of
 each sub-folder must match the \code{cfg$tagName}.}
 
 \item{shapefolder}{[character]\cr optional. The full pathname to a folder
-where shapefiles will be stored (if requested),}
+where shapefiles will be stored (if requested).}
 }
 \value{
-Nothing.
+A list containing:
+\itemize{
+\item{posns - [dataframe] the computed positions, with columns:}
+\itemize{
+\item{\code{tFirst, tSecond, type} - see \code{\link[GeoLight]{twilightCalc} for info.}}
+\item{\code{src} - the source of the position, either \code{"Calib"} for
+calibration period or \code{"Deployment"} for deployment period.}
+\item{\code{lng, lat} - the longitude and latitude.}
+\item{\code{smthlng, smthlat} - the smoothed longitude and latitude, if
+requested.}
+}
+\item{\code{light} - [dataframe] the raw light data after applying optional date
+filtering. See xxxconfig_format.}
+\item{\code{act} - [dataframe] the activity data.}
+\item{\code{calib} - [dataframe] the raw light data during calibration.}
+\item{\code{cfg} - [dataframe] the config settings used.}
+\item{\code{m} - a Leaflet map.}
+}
 }
 \description{
 Process a single GLS logger raw light data set according to

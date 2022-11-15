@@ -4,13 +4,17 @@
 \alias{plot_activity}
 \title{Plot activity data}
 \usage{
-plot_activity(dat, maxact = 200)
+plot_activity(dat, type = c("p", "l", "b"), maxact = 200)
 }
 \arguments{
 \item{dat}{[dataframe]\cr Required. A dataframe containing columns
 \code{datetime} and \code{act}.}
 
-\item{maxact}{[numeric]\cr optional - default 200. The maximum value \code{act} can take.
+\item{type}{[character]\cr Optional. The type of plot to produce: point ("p"),
+line ("l"), or both ("b"). Plots with lines tend to be very crowded,
+so it's helpful to convert the resulting plot to \code{plotly} and zoom in.}
+
+\item{maxact}{[numeric]\cr Optional - default 200. The maximum value \code{act} can take.
 Used to scale the y axis of the plot in \%.}
 }
 \value{
@@ -30,3 +34,22 @@ y-axis.
  Dave Fifield
 }
 
+\examples{
+
+res <- do_multi_geolocation(folder = here::here("Data/Tag data"),
+                       cfgfile = here::here("Data/geolocation settings.csv"),
+                       shapefolder = here::here("GIS/Shapefiles"),
+                       subset = c("C4567"))
+
+# Point plot
+p <- plot_activity(res$C4567$act)
+p
+
+# Line and point plot
+p <- plot_activity(res$C4567$act, type = "b")
+p
+library(plotly)
+pl <- ggplotly(p)
+pl
+
+}
