@@ -178,20 +178,22 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   # read light data, implicitly assumes first row is headers
   # (it is some stuff for BAS loggers which gets ignored)
   message("Reading light data")
-  alldat <- read.csv(file.path(tagDir, cfg$lightFile))
-  names(alldat) <- colNames
+  alldat <- read.csv(file.path(tagDir, cfg$lightFile)) %>%
+    purrr::set_names(colNames)
 
   # read activity data if it exists
-  actfile <- file.path(tagDir, sub("lig$", "act", cfg$lightFile))
-  if (file.exists(actfile)) {
-    message("Reading activity data")
-    act <- readr::read_csv(actfile, skip = 1, col_names = FALSE,
-          col_types = c("ccdi")) %>%
-      purrr::set_names(c("status", "datetime", "datesec", "act")) %>%
-      dplyr::mutate(datetime = lubridate::dmy_hms(datetime))
-  } else {
-    message("No activity data found, skipping.")
-    act <- NULL
+  if (cfg$readActivity) {
+    actfile <- file.path(tagDir, sub("lig$", "act", cfg$lightFile))
+    if (file.exists(actfile)) {
+      message("Reading activity data")
+      act <- readr::read_csv(actfile, skip = 1, col_names = FALSE,
+            col_types = c("ccdi")) %>%
+        purrr::set_names(c("status", "datetime", "datesec", "act")) %>%
+        dplyr::mutate(datetime = lubridate::dmy_hms(datetime))
+    } else {
+      message("No activity data found, skipping.")
+      act <- NULL
+    }
   }
 
   # create POSIXct date
@@ -452,7 +454,13 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     }
   }
 
-  list(posns = traj, elev = elev, light = dat, act = act, calib = calib, cfg = cfg, map = m)
+  list(posns = traj, elev = elev, light = dat,
+       act = if(exists("act")) {
+         act
+       }else {
+         NULL
+       },
+       calib = calib, cfg = cfg, map = m)
 }
 
 do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
