@@ -44,8 +44,8 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       include = "l",
       lightFile	 =  "c",
       colNames = "c",
-      lThresh	 =  "d",
-      maxLightInt	 =  "d",
+      lThresh	 =  "i",
+      maxLightInt	 =  "i",
       removeFallEqui	 =  "l",
       fallEquiStart	 =  readr::col_date(),
       fallEquiEnd	 =  readr::col_date(),
@@ -65,14 +65,13 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       calibLong	 =  "d",
       elev =  "d",
       keepCalibPoints	 =  "l",
-      loadLight	 =  "l",
-      loadCalib	 =  "l",
       calibAsk	 =  "l",
       deplAsk	 =  "l",
       createShapefile	 =  "l",
       boxcarSmooth	 =  "l",
+      b_iter = "i",
       b_func	 =  "c",
-      b_width	 =  "d",
+      b_width	 =  "i",
       b_pad	 =  "l",
       b_w	 =  "c",
       b_na.rm	 =  "l",
@@ -94,7 +93,7 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       h	 =  "d",
       unin	 =  "c",
       unout =  "c",
-      grid =  "d",
+      grid =  "i",
       plot_map = "l")
     ) %>%
     dplyr::filter(include == TRUE) %>%
@@ -121,31 +120,33 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
     purrr::set_names(cfgs$tagName)
 }
 
-#'@export
-#'@title Do geolocation for one GLS data set
+#' @export
 #'
-#'@description Process a single GLS logger raw light data set according to
+#' @title Do geolocation for one GLS data set
+#'
+#' @description Process a single GLS logger raw light data set according to
 #'    settings given in \code{cfg} using the \pkg{GeoLight} package.
 #'
-#'@param cfg \[character]\cr Required. A dataframe of configuration information
+#' @param cfg \[character]\cr Required. A dataframe of configuration information
 #'    to control the processing.
 #'
-#'@param folder \[character]\cr Required. The path to the folder that contains
+#' @param folder \[character]\cr Required. The path to the folder that contains
 #'    the tag data stored in separate sub-folders for each tag. The name of
 #'    each sub-folder must match the \code{cfg$tagName}.
 #'
-#'@param shapefolder \[character]\cr optional. The full pathname to a folder
+#' @param shapefolder \[character]\cr optional. The full pathname to a folder
 #'    where shapefiles will be stored (if requested).
 #'
-#'@details The details
+#' @details The details
 #'
 #'    There are quite strict naming conventions for subfolders, light files, etc.
 #'
-#'@return A list containing:
+#' @return A list containing:
 #' \itemize{
 #'  \item{posns - \[dataframe] the computed positions, with columns:}
 #'  \itemize{
-#'      \item{\code{tFirst, tSecond, type} - see \code{\link[GeoLight]{twilightCalc} for info.}}
+#'      \item{\code{tFirst, tSecond, type} - see
+#'      \code{\link[GeoLight]{twilightCalc} for info.}}
 #'      \item{\code{src} - the source of the position, either \code{"Calib"} for
 #'         calibration period or \code{"Deployment"} for deployment period.}
 #'      \item{\code{lng, lat} - the longitude and latitude.}
@@ -153,7 +154,7 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
 #'          requested.}
 #'  }
 #'  \item{\code{light} - \[numeric] the sun elevation angle used in the
-#'      calculation of positions.
+#'      calculation of positions.}
 #'  \item{\code{light} - \[dataframe] the raw light data after applying optional date
 #'     filtering. See xxxconfig_format.}
 #'  \item{\code{act} - \[dataframe] the activity data.}
@@ -161,7 +162,7 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
 #'  \item{\code{cfg} - \[dataframe] the config settings used.}
 #'  \item{\code{m} - a Leaflet map.}
 #' }
-#'@section Author: Dave Fifield
+#' @section Author: Dave Fifield
 do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   message(sprintf("\n\nProcessing tag %s", cfg$tagName))
 
@@ -186,12 +187,21 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     actfile <- file.path(tagDir, sub("lig$", "act", cfg$lightFile))
     if (file.exists(actfile)) {
       message("Reading activity data")
-      act <- readr::read_csv(actfile, skip = 1, col_names = FALSE,
-            col_types = c("ccdi")) %>%
-        purrr::set_names(c("status", "datetime", "datesec", "act")) %>%
-        dplyr::mutate(datetime = lubridate::dmy_hms(datetime))
+      if (cfg$activityType == "coarse") {
+        act <- suppressWarnings(readr::read_csv(actfile, skip = 1, col_names = FALSE,
+              col_types = c("ccdi"))) %>%
+          purrr::set_names(c("status", "datetime", "datesec", "act")) %>%
+          dplyr::filter(status == "ok") %>%
+          dplyr::mutate(datetime = lubridate::dmy_hms(datetime))
+      } else { # fine scale activity data
+        act <- suppressWarnings(readr::read_csv(actfile, skip = 1, col_names = FALSE,
+              col_types = c("ccdic"))) %>%
+          purrr::set_names(c("status", "datetime", "datesec", "seconds", "act")) %>%
+          dplyr::filter(status == "ok") %>%
+          dplyr::mutate(datetime = lubridate::dmy_hms(datetime))
+      }
     } else {
-      message("No activity data found, skipping.")
+      message("No activity data file found, skipping.")
       act <- NULL
     }
   }
@@ -204,16 +214,12 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
                            date <= as.POSIXct(cfg$calibEnd, tz = "UTC"))
   plot(calib$date, calib$light, type = "l", main = paste0(cfg$tagName, " calibration"))
 
-  if (cfg$loadCalib) {
-    load(cfg$calibFile)
-  } else {    # get sun elevation angle from calibration data
-    calibtwi <- GeoLight::twilightCalc(datetime = calib$date, light = calib$light, LightThreshold = cfg$lThresh,
-                             maxLight = cfg$maxLightInt, ask = cfg$calibAsk)
-    # mark calib points as such in case we want to map them differently later
-    calibtwi$src <- "Calib"
-
-    save(calibtwi, file =  calibFile)
-  }
+  calibtwi <- GeoLight::twilightCalc(datetime = calib$date,
+                                     light = calib$light,
+                                     LightThreshold = cfg$lThresh,
+                                     maxLight = cfg$maxLightInt,
+                                     ask = cfg$calibAsk) %>%
+    dplyr::mutate(src <- "Calib")
 
   # if no default elev given
   if (is.na(cfg$elev)) {
@@ -251,18 +257,12 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   }
 
   # get dawn and dusk times for deployment
-  if (cfg$loadLight) {
-    load(twiFile)
-  } else {
-    twi <- GeoLight::twilightCalc(datetime = dat$date,
-                                  light = dat$light,
-                                  LightThreshold = cfg$lThresh,
-                                  maxLight = cfg$maxLightInt,
-                                  ask = cfg$deplAsk)
-
-    twi$src <- "Deployment" # mark these as deployment period
-    save(twi, file = twiFile)
-  }
+  twi <- GeoLight::twilightCalc(datetime = dat$date,
+                                light = dat$light,
+                                LightThreshold = cfg$lThresh,
+                                maxLight = cfg$maxLightInt,
+                                ask = cfg$deplAsk) %>%
+    dplyr::mutate(src = "Deployment") # mark these as deployment period
 
   # calculate locations
   coord <- GeoLight::coord(twi$tFirst, twi$tSecond, twi$type, degElevation = elev)
@@ -301,13 +301,13 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     purrr::set_names(c(names(twi), c("lng", "lat"))) %>%
     dplyr::filter(!is.na(lat))
 
-  # smoothing - currently smooths twice - Should add an option to choose how many times to smooth
+  # smoothing - iteratively smooth cfg$b_iter times
   if (cfg$boxcarSmooth) {
-    smth <- coord
-    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-    smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    smth <- cbind(traj$lng, traj$lat)
+    for (i in cfg$b_iter) {
+      smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+      smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+    }
     traj <- cbind(traj, smth) %>%
       purrr::set_names(c(names(traj), c("smthlng", "smthlat")))
 
@@ -322,12 +322,10 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     lngcol <- "smthlng"
     latcol <- "smthlat"
   } else {
-
     # combine calibration data in with deployment data?
     if (cfg$keepCalibPoints) {
       traj <- rbind(traj, calibPoints)
     }
-
     lngcol <- "lng"
     latcol <- "lat"
   }
@@ -395,7 +393,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
                         label = htmltools::HTML(as.character(htmltools::h1(cfg$tagName))),
                         labelOptions = leaflet::labelOptions(noHide = TRUE, textOnly = TRUE))
 
-  # Add smoothed points and path
+  # Add smoothed points and path. Hide unsmoothed points and path by default.
   if (cfg$boxcarSmooth){
     groups <- c(groups, "smoothed pnts", "smoothed path")
     m <- m %>%
@@ -406,7 +404,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
       leaflet::addPolylines(data = points_to_line(traj, long = "smthlng", lat = "smthlat"),
                           group = "smoothed path", weight = 1) %>%
-      leaflet::hideGroup(c("smoothed pnts", "smoothed path"))
+      leaflet::hideGroup(c("points", "path"))
   }
 
   # Map calibration points
@@ -424,8 +422,9 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   if (cfg$createKernel) {
 
     # create kernel UDSs and convert back to lat long for plotting
-    conts <- suppressWarnings(do_kernel(traj, lngcol = lngcol, latcol = latcol, elev = elev, cfg,
-                       shapefolder = shapefolder)) %>%
+    conts <- suppressWarnings(do_kernel(traj, lngcol = lngcol, latcol = latcol,
+                                        elev = elev, cfg = cfg,
+                                        shapefolder = shapefolder)) %>%
       purrr::map(~sp::spTransform(., CRSobj = sp::CRS("+proj=longlat +ellps=WGS84")))
 
 
@@ -446,12 +445,8 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   m <- leaflet::addLayersControl(m, overlayGroups = groups,
                     options = leaflet::layersControlOptions(collapsed = FALSE))
 
-  if (cfg$plot_map) {
-    if (isTRUE(getOption('knitr.in.progress'))) {
-        print(htmltools::tagList(m))
-      } else {
-        print(m)
-    }
+  if (cfg$plot_map && !isTRUE(getOption('knitr.in.progress'))) {
+    print(m)
   }
 
   list(posns = traj, elev = elev, light = dat,
@@ -472,8 +467,8 @@ do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   # create shapefile
   if (cfg$createShapefile) {
     filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
-                  ifelse(cfg$boxcarSmooth, "_smooth2", ""))
-    message(sprintf("\nCreating shapefile: %s\n", filename))
+                  ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
+    message(sprintf("\nCreating point shapefile: %s\n", filename))
     rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
                     driver = "ESRI Shapefile", overwrite_layer = T)
   }
@@ -489,7 +484,7 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
     dplyr::filter(src != "Calib") %>%
     dplyr::mutate(id = 1)
 
-  # Create a projection string assuming a lamber conic is good.
+  # Create a projection string assuming a lambert conic is good.
   # Longitude of center is mean of dat longitudes,
   # Latitudes of two standard parallells are 1/6 and 5/6 of
   # the latitudinal range of data.
@@ -501,7 +496,7 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
     lat2 <- min(lats) + ((5/6) * span)
 
     prjString <- paste0("+proj=lcc +lon_0=", mean(dat[, lngcol]),
-                      " +lat_1=", lat1, "+lat_2=", lat2, " +ellps=GRS80")
+                      " +lat_1=", lat1, " +lat_2=", lat2, " +ellps=GRS80")
   } else {
     prjString <- cfg$projString
   }
@@ -538,7 +533,7 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
 
 create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
   filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
-                ifelse(cfg$boxcarSmooth, "_smooth2", ""),
+                ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""),
                 "_UD_", pct)
   message(sprintf("Creating UD shapefile: %s\n", filename))
   rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
@@ -711,8 +706,6 @@ boxcar <- function(x, width = 5, bfunc = 'mean', pad = TRUE, anchor.ends = TRUE,
   return(boxout)
 }
 
-
-
 # Taken from here: https://rpubs.com/walkerke/points_to_line
 points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) {
 
@@ -797,18 +790,26 @@ points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) 
 #' pl <- ggplotly(p)
 #' pl
 #'
-plot_activity <- function(dat, type = c("p", "l", "b"), maxact = 200) {
-  type = match.arg(type)
-  int <- dat$datetime[2] - dat$datetime[1] # time between measures
-  p <- switch(type,
-      p = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
-            ggplot2::geom_point(size = 0.1),
-      l = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
-            ggplot2::geom_line(),
-      b = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
-            ggplot2::geom_point(size = 0.1) + ggplot2::geom_line()
-    )
-  p <- p + ggplot2::ylab(sprintf("Percent wet (per %d min)", as.integer(int)))
+plot_activity <- function(dat, plottype = c("p", "l", "b"),
+                          acttype = c("coarse", "fine"),
+                          maxact = 200) {
+  plottype = match.arg(plottype)
+  acttype = match.arg(acttype)
+  if (acttype == "coarse") {
+    int <- dat$datetime[2] - dat$datetime[1] # time between measures
+    p <- switch(plottype,
+        p = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
+              ggplot2::geom_point(size = 0.1),
+        l = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
+              ggplot2::geom_line(),
+        b = ggplot2::ggplot(dat, ggplot2::aes(x = datetime, y = act/maxact * 100))  +
+              ggplot2::geom_point(size = 0.1) + ggplot2::geom_line()
+      )
+    p <- p + ggplot2::ylab(sprintf("Percent wet (per %d min)", as.integer(int)))
+  } else { # fine scale activity data
+    p <- ggplot2::ggplot(dat, aes(x = datetime, y = act)) + geom_line()
+    p <- p + ggplot2::ylab("Activity sensor")
+  }
   print(p)
   invisible(p)
 }

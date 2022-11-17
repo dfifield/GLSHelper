@@ -22,13 +22,16 @@ A list containing:
 \itemize{
 \item{posns - [dataframe] the computed positions, with columns:}
 \itemize{
-\item{\code{tFirst, tSecond, type} - see \code{\link[GeoLight]{twilightCalc} for info.}}
+\item{\code{tFirst, tSecond, type} - see
+\code{\link[GeoLight]{twilightCalc} for info.}}
 \item{\code{src} - the source of the position, either \code{"Calib"} for
 calibration period or \code{"Deployment"} for deployment period.}
 \item{\code{lng, lat} - the longitude and latitude.}
 \item{\code{smthlng, smthlat} - the smoothed longitude and latitude, if
 requested.}
 }
+\item{\code{light} - [numeric] the sun elevation angle used in the
+calculation of positions.}
 \item{\code{light} - [dataframe] the raw light data after applying optional date
 filtering. See xxxconfig_format.}
 \item{\code{act} - [dataframe] the activity data.}

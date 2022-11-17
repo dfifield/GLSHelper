@@ -37,7 +37,7 @@ settings given in a configuration CSV file.
 This function
 reads the config file specified by \code{cfgfile} - each row
 specifies the settings for one dataset to process.  It then
-calls \url{do.geolocation} repeatedly - once for each data set.
+calls \link{do.geolocation} repeatedly - once for each data set.
 
 There are quite strict naming conventions for subfolders, light files, etc.
 See \code{\link{create_GLSHelper_folders}} for details.

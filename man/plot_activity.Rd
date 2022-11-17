@@ -4,18 +4,23 @@
 \alias{plot_activity}
 \title{Plot activity data}
 \usage{
-plot_activity(dat, type = c("p", "l", "b"), maxact = 200)
+plot_activity(
+  dat,
+  plottype = c("p", "l", "b"),
+  acttype = c("coarse", "fine"),
+  maxact = 200
+)
 }
 \arguments{
 \item{dat}{[dataframe]\cr Required. A dataframe containing columns
 \code{datetime} and \code{act}.}
 
+\item{maxact}{[numeric]\cr Optional - default 200. The maximum value \code{act} can take.
+Used to scale the y axis of the plot in \%.}
+
 \item{type}{[character]\cr Optional. The type of plot to produce: point ("p"),
 line ("l"), or both ("b"). Plots with lines tend to be very crowded,
 so it's helpful to convert the resulting plot to \code{plotly} and zoom in.}
-
-\item{maxact}{[numeric]\cr Optional - default 200. The maximum value \code{act} can take.
-Used to scale the y axis of the plot in \%.}
 }
 \value{
 The \code{ggplot} invisibly.
