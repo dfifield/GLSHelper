@@ -43,7 +43,6 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
     readr::cols( tagName =  "c",
       include = "l",
       lightFile	 =  "c",
-      colNames = "c",
       lThresh	 =  "i",
       maxLightInt	 =  "i",
       removeFallEqui	 =  "l",
@@ -173,14 +172,12 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   w <- as.numeric(unlist(strsplit(cfg$b_w, split = ",")))
   Xlim <- as.numeric(unlist(strsplit(cfg$Xlim, split = ",")))
   Ylim <- as.numeric(unlist(strsplit(cfg$Ylim, split = ",")))
-  colNames <- unlist(strsplit(cfg$colNames, split = ","))
   pcts <- as.numeric(unlist(strsplit(cfg$pcts, split = ",")))
 
   # read light data, implicitly assumes first row is headers
   # (it is some stuff for BAS loggers which gets ignored)
   message("Reading light data")
-  alldat <- read.csv(file.path(tagDir, cfg$lightFile)) %>%
-    purrr::set_names(colNames)
+  alldat <- GeoLight::ligTrans(file.path(tagDir, cfg$lightFile))
 
   # read activity data if it exists
   if (cfg$readActivity) {
@@ -206,20 +203,17 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     }
   }
 
-  # create POSIXct date
-  alldat$date <- as.POSIXct(strptime(as.character(alldat$datetime), format = "%d/%m/%y %H:%M:%S", tz = "UTC"))
-
   # calibration
-  calib <- dplyr::filter(alldat, date >= as.POSIXct(cfg$calibStart, tz = "UTC") &
-                           date <= as.POSIXct(cfg$calibEnd, tz = "UTC"))
-  plot(calib$date, calib$light, type = "l", main = paste0(cfg$tagName, " calibration"))
+  calib <- dplyr::filter(alldat, datetime >= as.POSIXct(cfg$calibStart, tz = "UTC")
+                         & datetime <= as.POSIXct(cfg$calibEnd, tz = "UTC"))
+  plot(calib$datetime, calib$light, type = "l", main = paste0(cfg$tagName, " calibration"))
 
-  calibtwi <- GeoLight::twilightCalc(datetime = calib$date,
+  calibtwi <- GeoLight::twilightCalc(datetime = calib$datetime,
                                      light = calib$light,
                                      LightThreshold = cfg$lThresh,
                                      maxLight = cfg$maxLightInt,
                                      ask = cfg$calibAsk) %>%
-    dplyr::mutate(src <- "Calib")
+    dplyr::mutate(src = "Calib")
 
   # if no default elev given
   if (is.na(cfg$elev)) {
@@ -243,21 +237,24 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # arbitrary date filter useful to exclude as much of at colony time as possible
   if (cfg$doDateFilter) {
-    dat <- dplyr::filter(dat, date >= cfg$filterStart & date <=  cfg$filterEnd)
+    dat <- dplyr::filter(dat, datetime >= cfg$filterStart &
+                           datetime <=  cfg$filterEnd)
   }
 
   # remove spring Equinox
   if (cfg$removeSpringEqui) {
-    dat <- dplyr::filter(dat, date <= cfg$springEquiStart | date >= cfg$springEquiEnd)
+    dat <- dplyr::filter(dat, datetime <= cfg$springEquiStart |
+                           datetime >= cfg$springEquiEnd)
   }
 
   # remove fall Equinox
   if (cfg$removeFallEqui) {
-    dat <- dplyr::filter(dat, date <= cfg$fallEquiStart | date >= cfg$fallEquiEnd)
+    dat <- dplyr::filter(dat, datetime <= cfg$fallEquiStart |
+                           datetime >= cfg$fallEquiEnd)
   }
 
   # get dawn and dusk times for deployment
-  twi <- GeoLight::twilightCalc(datetime = dat$date,
+  twi <- GeoLight::twilightCalc(datetime = dat$datetime,
                                 light = dat$light,
                                 LightThreshold = cfg$lThresh,
                                 maxLight = cfg$maxLightInt,
@@ -305,8 +302,12 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   if (cfg$boxcarSmooth) {
     smth <- cbind(traj$lng, traj$lat)
     for (i in cfg$b_iter) {
-      smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
-      smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width, pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm, anchor.ends = cfg$b_anchor.ends)
+      smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width,
+                          pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm,
+                          anchor.ends = cfg$b_anchor.ends)
+      smth[, 2] <- boxcar(smth[, 2], bfunc =  cfg$b_func, width = cfg$b_width,
+                          pad = cfg$b_pad, w = w, na.rm = cfg$b_na.rm,
+                          anchor.ends = cfg$b_anchor.ends)
     }
     traj <- cbind(traj, smth) %>%
       purrr::set_names(c(names(traj), c("smthlng", "smthlat")))
@@ -352,8 +353,9 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
       TRUE ~ NA_character_))
 
   # Create palettes
-  pal.season <- leaflet::colorFactor(c(spring_summer = "brown", fall_winter = "blue"),
-                              domain = traj$season)
+  pal.season <- leaflet::colorFactor(c(spring_summer = "brown",
+                                       fall_winter = "blue"),
+                                     domain = traj$season)
   pal <- leaflet::colorFactor(
                c(Jan = "cyan", Feb = "magenta", Mar = "grey60", Apr = "black",
                  May = "sienna", Jun = "red", Jul = "olivedrab1",
@@ -468,9 +470,9 @@ do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   if (cfg$createShapefile) {
     filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
                   ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
-    message(sprintf("\nCreating point shapefile: %s\n", filename))
-    rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
-                    driver = "ESRI Shapefile", overwrite_layer = T)
+    message(sprintf("\nCreating point shapefile: %s", filename))
+    suppressWarnings(rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
+                    driver = "ESRI Shapefile", overwrite_layer = T))
   }
   shp
 }
@@ -535,11 +537,10 @@ create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
   filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
                 ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""),
                 "_UD_", pct)
-  message(sprintf("Creating UD shapefile: %s\n", filename))
-  rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
-                  driver = "ESRI Shapefile", overwrite_layer = T)
+  message(sprintf("Creating %s UD shapefile: %s", pct, filename))
+  suppressWarnings(rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
+                  driver = "ESRI Shapefile", overwrite_layer = T))
 }
-
 
 #'@export
 #'@title Create GLShelper folder structure

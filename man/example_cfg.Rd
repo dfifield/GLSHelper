@@ -55,7 +55,21 @@ calibration data.}
 \item{keepCalibPoints - logical}{retain computed calibration points in position
 output? See the \link{do_multi_geolocation} documentation for help on
 differentiaing calibration vs deployment positions in the output.}
-"loadLight"             "loadCalib"
+\item{calibAsk - logical}{ask the user to confirm each twilight during
+the calibration period. This corresponds to the \code{ask} argument to
+\code{\link[GeoLight]{twilightCalc}}.}
+\item{deplAsk - logical}{ask the user to confirm each twilight during
+the deployment period. This corresponds to the \code{ask} argument to
+\code{\link[GeoLight]{twilightCalc}}.}
+\item{createShapefile - logical}{should a shapfile of the points be
+created. Shapefiles will be created in the folder indicated by the
+\code{shapefolder} argument to \link{do_multi_geolocation}.}
+\item{boxcarSmooth - logical}{should a boxcar (ie, sliding window)
+smoothing filter be applied to the deployment positions. If \code{TRUE}
+both the smoothed and unsmoothed positions and paths will be mapped
+and returned by \link{do_multi_geolocation}.}
+\item{b_iter - integer}{number of iterations of the smoother to execute.
+Typical values are 1 or 2.}
 \item{country}{Country name}
 \item{iso2, iso3}{2 & 3 letter ISO country codes}
 \item{year}{Year}
