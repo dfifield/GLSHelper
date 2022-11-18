@@ -1,12 +1,18 @@
 Package: GLSHelper
-Title: What the Package Does (One Line, Title Case)
+Title: Quickly Process Multiple GLS Datasets
 Version: 0.1.0
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("Dave", "Fifield", , "dave.fifield@ec.gc.ca", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-5433-4733"))
+Description: This package allows you to process many GLS tag datasets quickly
+    with a single function call. Internally it uses the GeoLight
+    package to perform the computations. It uses a configuration file (CSV format) to
+    specify options for each tag dataset. It includes options for selecting light
+    thresholds, removing equinoxes, date filtering, speed filtering, outlier removal,
+    sliding window smoothing, 
+    creating any number of kernel UD contours, writing points and kernel UDs to
+    shapefiles, ploting activity (wet/dry) data, and producing a leaflet map.
+License: `use_gpl3_license()`
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.1
