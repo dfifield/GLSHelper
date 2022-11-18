@@ -70,10 +70,7 @@ both the smoothed and unsmoothed positions and paths will be mapped
 and returned by \link{do_multi_geolocation}.}
 \item{b_iter - integer}{number of iterations of the smoother to execute.
 Typical values are 1 or 2.}
-\item{country}{Country name}
-\item{iso2, iso3}{2 & 3 letter ISO country codes}
-\item{year}{Year}
-...
+Incomplete, more to come...
 }
 }
 \usage{

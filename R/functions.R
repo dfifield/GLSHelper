@@ -542,7 +542,7 @@ create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
                   driver = "ESRI Shapefile", overwrite_layer = T))
 }
 
-#'@export
+#' @noRd
 #'@title Create GLShelper folder structure
 #'
 #'@description blah

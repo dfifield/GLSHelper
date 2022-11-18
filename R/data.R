@@ -96,9 +96,6 @@
 # [52] "projString"            "h"                     "unin"
 # [55] "unout"                 "grid"                  "plot_map"
 # [58] "readActivity"          "activityType"
-#'   \item{country}{Country name}
-#'   \item{iso2, iso3}{2 & 3 letter ISO country codes}
-#'   \item{year}{Year}
-#'   ...
+#'   Incomplete, more to come...
 #' }
 "example_cfg"
