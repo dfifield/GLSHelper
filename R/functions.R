@@ -3,39 +3,335 @@
 #' @title Do geolocation for multiple GLS data sets
 #'
 #' @description Process multiple GLS logger raw light data sets according to
-#'    settings given in a configuration CSV file.
+#'    settings given in a configuration file.
 #'
 #' @param folder \[character]\cr Required. The name of a folder which contains
 #'   the GLS light data for one or more devices. The light data for each device
 #'   must be in a separate sub-folder of \code{folder}. The name of each
-#'   sub-folder must match the \code{tagName} column of the config file. See
-#'   the \code{file} parameter.
+#'   sub-folder must match the value given in the \code{tagName} column of
+#'   `cfgfile`. See \emph{Configuration file format} below.
 #'
 #' @param cfgfile \[character]\cr Required. The full pathname of a CSV configuration
 #'    file. This file contains one line per GLS data set to
-#'    be processed. See \code{\link{do_geolocation}} for details.
+#'    be processed. See \emph{Configuration file format} below.
 #'
 #' @param shapefolder \[character]\cr optional. The full pathname to a folder
 #'    where shapefiles will be stored (if requested),
 #'
 #' @param subset \[character]\cr Optional. A character vector of tag names to
-#'    include. These must match the \code{tagName} column in the configuration
-#'    file. This argument overrides the value of the \code{include} column
-#'    in the configuration file.
+#'    include - this is an easy way to only process a subset of the tags listed
+#'    in the configuration file. These names must match the \code{tagName}
+#'    column in the configuration file. Tags not listed will be excluded from
+#'    analysis, as will listed tags whose `include` column is `FALSE`
+#'    in the configuation file.
 #'
-#'@details This function
+#' @details This function
 #'    reads the config file specified by \code{cfgfile} - each row
 #'    specifies the settings for one dataset to process.  It then
-#'    calls [do.geolocation] repeatedly - once for each data set.
+#'    processes each data set according to the configuration options given.
 #'
-#'    There are quite strict naming conventions for subfolders, light files, etc.
-#'    See \code{\link{create_GLSHelper_folders}} for details.
+#'   \strong{Configuration file format}
 #'
-#'@return A list which each element being the return value of
-#'    \code{\link{do_geolocation}}.
+#'   The names, data types, and meanings of the columns in the configuration file
+#'   file are documented in the list below.
 #'
-#'@section Author: Dave Fifield
+#'   An example configuration CSV file is included with this package
+#'   and can be found at the location given by the following command:
+#'
+#' `system.file("extdata", "geolocation_settings.csv", package = "GLSHelper")`
+#'
+#'   Note, if you edit your config file
+#'   with `Excel` make sure the cell type is set to `"General"` for all cells.
+#'
+#' \describe{
+#'   \item{tagName - character}{The name of the tag (eg., `MK3005 050`). The data for
+#'     each tag must be stored in a unique sub-folder of the `folder` argument and
+#'     be named `tagName`.}
+#'
+#'   \item{include - logical}{Whether to process this tag's data. This is a convenient
+#'     way to exclude/include certain tags.}
+#'
+#'   \item{lightFile - character}{The name of the file containing
+#'     the light level data. eg., `"MK3005 050_000.lig"`,}
+#'
+#'   \item{lThresh - integer}{The light threshold level for dawn/dusk. See
+#'     \code{\link[GeoLight]{twilightCalc}} in the \pkg{GeoLight} package
+#'     for more info.}
+#'
+#'   \item{maxLightInt - integer}{The duration in minutes over which the tag records the
+#'     maximum light interval - typically 10, 5, or 2. This corresponds to the
+#'     `maxLight` argument to \code{\link[GeoLight]{twilightCalc}}}
+#'
+#'   \item{removeFallEqui - logical}{Whether to remove positions during the fall
+#'      equinox.}
+#'
+#'   \item{fallEquiStart - date in ISO8601 format (YMD, e.g. 2013-09-07)}{Start
+#'    date of the fall equinox period.}
+#'
+#'   \item{fallEquiEnd - date in ISO8601 format (YMD, e.g. 2013-10-14)}{End date
+#'      of the fall equinox period.}
+#'
+#'   \item{removeSpringEqui - logical}{Whether to remove positions during the
+#'      spring equinox.}
+#'
+#'   \item{springEquiStart - date in ISO8601 format (YMD, e.g. 2014-02-21)}{Start date
+#'      of the spring equinox period.}
+#'
+#'   \item{springEquiEnd - date in ISO8601 format (YMD, e.g. 2014-04-07)}{End date
+#'      of the spring equinox period.}
+#'
+#'   \item{doDateFilter - logical}{Enable configurable date filter? Only positions
+#'     with dates between `filterStart` and `filterEnd` will be retained.}
+#'
+#'   \item{filterStart - date in ISO8601 format (YMD, e.g. 2013-09-07)}{Start date
+#'      of the period to keep.}
+#'
+#'   \item{filterEnd - date in ISO8601 format (YMD, e.g. 2014-06-07)}{End date of the
+#'      period to keep.}
+#'
+#'   \item{deplStart - date in ISO8601 format (YMD, e.g. 2013-07-13)}{Start date
+#'      of the deployment on the animal.}
+#'
+#'   \item{deplStart - date in ISO8601 format (YMD, e.g. 2014-06-07)}{End date
+#'      of the deployment on the animal.}
+#'
+#'   \item{deplLat - numeric}{Latitude of the deployment location. All geographic
+#'     coordinates are assumed to reference the WGS84 datum.}
+#'
+#'   \item{deplLong - numeric}{Longitude of the deployment location. All geographic
+#'     coordinates are assumed to reference the WGS84 datum.}
+#'
+#'   \item{calibStart - date in ISO8601 format (YMD HM, e.g. 2013-06-28 15:00)}{
+#'      Start date of the calibration (ie, ground-truthing) period.}
+#'
+#'   \item{calibEnd - date in ISO8601 format (YMD HM, e.g. 2013-07-07 15:00)}{
+#'      End date of the calibration (ie, ground-truthing) period.}
+#'
+#'   \item{calibLat - numeric}{Latitude of the calibration location. All geographic
+#'     coordinates are assumed to reference the WGS84 datum.}
+#'
+#'   \item{calibLong - numeric}{Longitude of the calibration location. All geographic
+#'     coordinates are assumed to reference the WGS84 datum.}
+#'
+#'   \item{elev - numeric}{The sun elevation angle when `lThresh` units of light
+#'      are recorded. Leave blank (normal case) to have this computed from the
+#'      calibration data.}
+#'
+#'   \item{keepCalibPoints - logical}{Retain computed calibration points in position
+#'      output? See the `Value` section below for help on
+#'      distinguishing calibration vs deployment positions in the output.}
+#'
+#'   \item{calibAsk - logical}{Ask the user to confirm each twilight during
+#'       the calibration period? This corresponds to the `ask` argument to
+#'       \code{\link[GeoLight]{twilightCalc}}.}
+#'
+#'   \item{deplAsk - logical}{Ask the user to confirm each twilight during
+#'       the deployment period? This corresponds to the `ask` argument to
+#'       \code{\link[GeoLight]{twilightCalc}}.}
+#'
+#'   \item{createShapefile - logical}{Should a shapfile of the points be
+#'       created. Shapefiles will be created in the folder indicated by the
+#'       `shapefolder` argument. The values of several parameters are incorporated
+#'       into the name of the resulting shapefile. For example, if `tagName = "MK3005 050"`,
+#'      `lThresh = 16`, `elev = -3.48`, `boxcarSmooth = TRUE`, and `b_iter = 2`
+#'      the shapefiles will be named:
+#'       \cr
+#'      `MK3005 050_thr_16_elev_-3.48_smooth2`
+#'       }
+#'
+#'   \item{boxcarSmooth - logical}{Should a boxcar (ie, sliding window)
+#'       smoothing filter be applied to the deployment positions? The smoother
+#'       adjusts the coordinates of each point taking into account the current
+#'       point's coordinates and those of some number of previous and succeeding
+#'       points. The number of points to consider, their weightings, and the
+#'       function used to combine them are specified by the \code{b_width},
+#'       \code{b_w}, and \code{b_func} options respectively. For example, with
+#'       \code{b_width = 5}, \code{b_w = c(1,2,3,2,1)}, and \code{b_func =
+#'       'weighted_mean'} the current position's latitude/longitude is the weighted
+#'       mean (in a 1:2:3:2:1 ratio) of the second previous, previous, current,
+#'       subsequent, and second subsequent position’s latitude/longitude.
+#'       If `boxcarSmooth` is `TRUE`, then both the smoothed and unsmoothed
+#'       positions and paths will be mapped and returned by [do_multi_geolocation].}
+#'
+#'   \item{b_iter - integer}{
+#'       Boxcar smoothers are often applied iteratively and this value indicates
+#'       the number of iterations of the smoother to execute. Typical values are
+#'       1 or 2.}
+#'
+#'   \item{b_func - character}{The name of the function to apply to the
+#'       coordinates in the sliding window. Typically this is 'weighted.mean'
+#'       and it is unlikely you will need to change this. However any function
+#'       that takes a vector of numbers as its 1st argument, a series of weights,
+#'       `w`, and a logical `na.rm`, and returns a single numeric value will
+#'        work.}
+#'
+#'   \item{b_width - integer}{The width of the sliding window (or boxcar). This controls
+#'       how many preceding and succeeding points influence the coordinates of
+#'       the current point. Normally this is an odd number (a warning is printed
+#'       if not) so that the same number of preceding and succeeding points
+#'       exert influence.}
+#'
+#'   \item{b_pad - logical}{Should the first (last) positions in the track
+#'     be padded with
+#'     enough extra copies of themselves to provide a complete `b_width` wide
+#'     window when processing the first and last windows, respectively.
+#'     For example, without padding, the first full window
+#'     (with `b_width = 5`) will be centered on the third position, and likewise
+#'     the last full window will be centered on the third-last position. This
+#'     will cause the resulting smoothed track to have 4 less points than the
+#'     original (two lost at the beginning and two at the end).
+#'     This is because each full window-width of points in the original
+#'     track is converted to a single point in the output (typically as the
+#'     weighted mean of its constituents). When `b_pad` is `TRUE`, a sufficient
+#'     number of copies of the first (last) coordinate are inserted at the
+#'     beginning (end) of the track so that the first (last) full window
+#'     is centered on the first (last) track position. In this case,  the number
+#'     of points in the smoothed track is the same as that in the original.}
+#'
+#'   \item{b_w - integer}{A vector of length `b_width` giving the relative weights
+#'    of each position in the sliding window.}
+#'
+#'   \item{b_na.rm - logical}{Passed directly to `b_func` (typically,
+#'     `weighted.mean`) indicating whether `NA` values should be stripped from
+#'     each window before applying `b_func`.}
+#'
+#'   \item{b_anchor.ends - logical}{If `TRUE` The first and last positions in
+#'     the track are not modified by the smoother. This is useful, for example,
+#'     when the first and
+#'     final positions of a track are known to be at a specific location
+#'     (e.g., breeding colony).}
+#'
+#'   \item{doSpeedFilter - logical}{Should a maximum-speed
+#'     filter be applied. If `TRUE`, successive positions requiring, on average,
+#'      speeds of more than `maxSpeed` km/hour will be considered unrealistic and
+#'     be removed. Uses \code{\link[GeoLight]{distanceFilter}} from \pkg{GeoLight}.}
+#'
+#'   \item{maxSpeed - numeric}{The maximum realistic animal speed in km/h.}
+#'
+#'   \item{removeOutliers - logical}{Should positional outliers outside a
+#'     bounding box given by `minX, maxX, minY, maxY` be removed?}
+#'
+#'   \item{minX, maxX, minY, maxY - numeric}{The min/max longitude and latitudes
+#'      respectively of the bounding box for removing outliers. Positions whose
+#'      coordinates fall on the bounding box are removed.}
+#'
+#'   \item{doStatPeriods - logical}{Should stationary periods be computed? See
+#'     \code{\link[GeoLight]{changeLight}} for more information.}
+#'
+#'   \item{Xlim, Ylim - numeric}{The longitude and latitude limits for the site map
+#'      resulting from calculating stationary periods. See `doStatPeriods` and
+#'      \code{\link[GeoLight]{siteMap}}. }
+#'
+#'   \item{createKernel - logical}{Should kernel utilization distributions be
+#'     computed? if `TRUE`, \code{\link[adehabitatHR]{kernelUD}} Is used to
+#'     compute the kernel surface and \code{\link[adehabitatHR]{getverticesHR}}
+#'     is use to produce the requested percentage contours. See also
+#'     `pcts, projString, h, grid, unin,` and `unout` below.}
+#'
+#'   \item{createKernelShapefile - logical}{Should shapefile(s) of the contoured
+#'      kernel utilization distributions be created. If `TRUE`, one shapefile
+#'      will be created for each value of `pcts`. If `boxcarSmooth = TRUE`,
+#'      the smoothed positions will be used for the kernel otherwise the original
+#'      ones will be. The values of several parameters are incorporated
+#'      into the name of the resulting shapefile. For example,
+#'      if `tagName = "MK3005 050"`,
+#'      `lThresh = 16`, `elev = -3.48`, `boxcarSmooth = TRUE`, `b_iter = 2` and
+#'      `pcts = c(50, 95)`, then two shapefiles will be produced with names:
+#'       \cr
+#'      `MK3005 050_thr_16_elev_-3.48_smooth2_UD_50`, and
+#'       \cr
+#'      `MK3005 050_thr_16_elev_-3.48_smooth2_UD_95`
+#'      }
+#'
+#'   \item{pcts - integer}{Vector of UD contour percentages to compute (e.g
+#'     c(50, 95)).}
+#'
+#'   \item{projString - character}{Because the kernel surface to be contoured
+#'    must be computed based on Cartesian
+#'     coordinates, the un-projected geographic coordinates (i.e.
+#'     latitude/longitude) must be projected to a 2D coordinate system first.
+#'     This parameter gives the PROJ4 string of the coordinate system to use
+#'     (e.g., `"+proj=merc +datum=WGS84 +units=m +ellps=WGS84"`). If
+#'     left blank, then a Lambert conformal conic projection will be chosen with
+#'     central meridian at the `mean` of the track's longitudes, and standard
+#'     parallels at 1/6 and 5/6 of the latitudinal range of the track's
+#'     positions.}
 
+#'   \item{h - integer}{The kernel smoothing bandwidth parameter - this is the
+#'     `h` parameter passed to \code{\link[adehabitatHR]{kernelUD}}. If left
+#'     blank, then the `href` method is used. Otherwise, this value is
+#'     in the same units as the chosen projection, typically meters
+#'     (see `projString`)}
+#'
+#'   \item{unin, unout - character}{These are the input and output units respectively
+#'      for the call to
+#'     \code{\link[adehabitatHR]{getverticesHR}} to create the UD contours.
+#'     `unin` must the same as units of the chosen projection (typically `m` for
+#'     "meters", see `projString`). `unout` is typically set to `km2` so that
+#'     the area of the resulting UD contour is in kilometres squared.}
+#'
+#'   \item{grid - integer}{The number of grid cells for the computed kernel surface. This
+#'   is passed as the `grid` argument to \code{\link[adehabitatHR]{kernelUD}}.}
+#'
+#'   \item{plot_map - logical}{Should a Leaflet map be plotted for each tag data
+#'    set? Maps can only be plotted in this way when [do_multi_geolocation]
+#'    is called from
+#'    an interactive R script. This argument will be ignored when
+#'    `do_multi_geolocation` is called from a knitted RMD document. To plot maps
+#'    in a knitted RMD, capture the object
+#'    returned by `do_multi_geolocation` and print the maps with auxilliary code
+#'    inserted directly into a chunk. See `Examples`.}
+#'
+#'   \item{readActivity - logical}{Should the tag activity data be read?}
+#'
+#'   \item{activityType - character}{Type of activity data file to expect.
+#'     Currently only accepts `coarse` or `fine` corresponding to the
+#'     coarse-scale or fine-scale activity data of BAS/BioTrack devices.}
+#'}
+#' @return A list with one element for each tag data set processed. The names
+#' of the list elements are taken from the `tagName` column of the input
+#' configuration file. Each element of this list is itself a list containing:
+#' \itemize{
+#'  \item{posns - \[dataframe] the computed positions, with columns:}
+#'  \itemize{
+#'      \item{\code{tFirst, tSecond, type} - sun rise/set times. See
+#'      \code{\link[GeoLight]{twilightCalc} for info.}}
+#'      \item{\code{src} - the source of the position, either \code{"Calib"} for
+#'         calibration period or \code{"Deployment"} for deployment period.}
+#'      \item{\code{lng, lat} - the longitude and latitude.}
+#'      \item{\code{smthlng, smthlat} - the smoothed longitude and latitude, if
+#'          requested.}
+#'  }
+#'  \item{\code{elev} - \[numeric] the sun elevation angle used in the
+#'      calculation of positions.}
+#'  \item{\code{light} - \[dataframe] the raw light data after applying any
+#'   optional date filtering.}
+#'  \item{\code{act} - \[dataframe] the activity data.}
+#'  \item{\code{calib} - \[dataframe] the raw light data during calibration.}
+#'  \item{\code{cfg} - \[dataframe] the config settings used.}
+#'  \item{\code{m} - a Leaflet map.}
+#' }
+#'
+#' @section Author: Dave Fifield
+#'
+#' @examples
+#' res <- do_multi_geolocation(folder = here::here("Data/Tag data"),
+#'                             cfgfile = here::here("Data/geolocation_settings.csv"),
+#'                             shapefolder = here::here("GIS/Shapefiles"))
+#'
+#' # To extract and display maps in a knitted RMD document, place the
+#' # following code in a code chunk:
+#' maps <- purrr::map(res, "map") # Extract the maps from the res object.
+#'
+#' # Display - note this code is safe to execute both interactively and
+#' # during knitting. tagList wraps the Leaflet maps in the appropriate
+#' # HTML to allow them to appear in a knitted document.
+#' if (isTRUE(getOption('knitr.in.progress'))) {
+#'   maps %>%
+#'    tagList
+#' } else {
+#'   maps
+#'}
 do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
                                subset = NULL) {
   cfgs <- readr::read_csv(cfgfile,
@@ -75,7 +371,7 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
       b_w	 =  "c",
       b_na.rm	 =  "l",
       b_anchor.ends	 =  "l",
-      doDistanceFilter	 =  "l",
+      doSpeedFilter	 =  "l",
       maxSpeed	 =  "d",
       removeOutliers	 =  "l",
       minX	 =  "d",
@@ -118,9 +414,7 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
     purrr::map(do_geolocation, folder = folder, shapefolder = shapefolder) %>%
     purrr::set_names(cfgs$tagName)
 }
-
-#' @export
-#'
+#' @noRd
 #' @title Do geolocation for one GLS data set
 #'
 #' @description Process a single GLS logger raw light data set according to
@@ -152,10 +446,10 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
 #'      \item{\code{smthlng, smthlat} - the smoothed longitude and latitude, if
 #'          requested.}
 #'  }
-#'  \item{\code{light} - \[numeric] the sun elevation angle used in the
+#'  \item{\code{elev} - \[numeric] the sun elevation angle used in the
 #'      calculation of positions.}
 #'  \item{\code{light} - \[dataframe] the raw light data after applying optional date
-#'     filtering. See xxxconfig_format.}
+#'     filtering}
 #'  \item{\code{act} - \[dataframe] the activity data.}
 #'  \item{\code{calib} - \[dataframe] the raw light data during calibration.}
 #'  \item{\code{cfg} - \[dataframe] the config settings used.}
@@ -274,7 +568,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   }
 
   # remove unrealistic positions - not sure what distance should be
-  if (cfg$doDistanceFilter) {
+  if (cfg$doSpeedFilter) {
     filt <- NA
     filt <- GeoLight::distanceFilter(twi$tFirst, twi$tSecond, twi$type,
                     degElevation = elev, distance = cfg$maxSpeed, units = "hour")
@@ -510,8 +804,9 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
 
   # kernelUD only wants 1 single animal ID column
   shp@data <- dplyr::select(dat, id)
-  kern <- adehabitatHR::kernelUD(shp, h = cfg$h, grid = cfg$grid)
-
+  kern <- adehabitatHR::kernelUD(shp,
+            h = ifelse(is.na(cfg$h), "href", cfg$h),
+            grid = cfg$grid)
 
   # create a vector of percents
   pcts <- cfg$pcts %>%
@@ -542,98 +837,6 @@ create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
                   driver = "ESRI Shapefile", overwrite_layer = T))
 }
 
-#' @noRd
-#'@title Create GLShelper folder structure
-#'
-#'@description blah
-#'
-#'@param root \[character]\cr Required. The root folder of your data analysis
-#'    project.
-#'
-#'@details GLSHelper is obnoxiously opinionated about the folder structure
-#'   containing your logger data and any generated outputs, shapefiles, etc.
-#'
-#'
-#'```
-#' -- root
-#'   |__Data
-#'     |__geolocation settings.csv
-#'     |__Tag data
-#'        |__MK3005 025
-#'          ...
-#'   |__GIS
-#'      |__Shapefiles
-#'      |__Images
-#'```
-#'
-#'   This function checks to see if sub-folders \code{Data, Data\\Tag Data, GIS,
-#'   GIS\\Shapefiles} and \code{GIS\\Images} exist and creates them if not.
-#'
-#' @return Nothing.
-#' @section Author: Dave Fifield
-#' @examples
-#'
-#' # Create folder structure in root of RStudio project
-#' create_GLSHelper_folders(here::here())
-create_GLSHelper_folders <- function(root = NULL) {
-  if (is.null(root)) stop("create_GLSHelper_folders: root is null, but is required!")
-
-  if (!dir.exists(root))
-    stop(sprintf("create_GLSHelper_folders: root folder '%s' does not exist.",
-                 root))
-
-  folders <- c(file.path(root, "Data"),
-               file.path(root, "Data/Tag data"),
-               file.path(root, "GIS"),
-               file.path(root, "GIS/Shapefiles"),
-               file.path(root, "GIS/Images"))
-
-  folders %>%
-    purrr::walk(function(folder){
-        if (!dir.exists(folder)) {
-          message(sprintf("Creating folder '%s'", folder))
-          dir.create(folder)
-        }
-    }
-  )
-}
-
-
-## Used to create the folder tree structure for documentation
-## create_GLSHelper_folders()
-##
-## Taken from https://gist.github.com/jennybc/2bf1dbe6eb1f261dfe60
-##
-## quick-and-dirty ersatz Unix tree command in R
-## inspired by this one-liner:
-## ls -R | grep ":$" | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/   /' -e 's/-/|/'
-## found here (among many other places):
-## http://serverfault.com/questions/143954/how-to-generate-an-ascii-representation-of-a-unix-file-hierarchy
-twee <- function(path = getwd(), level = Inf) {
-
-  fad <-
-    list.files(path = path, recursive = TRUE,no.. = TRUE, include.dirs = TRUE)
-
-  fad_split_up <- strsplit(fad, "/")
-
-  too_deep <- lapply(fad_split_up, length) > level
-  fad_split_up[too_deep] <- NULL
-
-  jfun <- function(x) {
-    n <- length(x)
-    if(n > 1)
-      x[n - 1] <- "|__"
-    if(n > 2)
-      x[1:(n - 2)] <- "   "
-    x <- if(n == 1) c("-- ", x) else c("   ", x)
-    x
-  }
-  fad_subbed_out <- lapply(fad_split_up, jfun)
-
-  cat(unlist(lapply(fad_subbed_out, paste, collapse = "")), sep = "\n")
-}
-
-# Modified from original by Carl Witthoft.
 # Modified from original by Carl Witthoft.
 # use bfunc to specify what function to apply to the windowed
 # region.
