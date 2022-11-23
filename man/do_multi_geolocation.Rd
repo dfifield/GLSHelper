@@ -304,7 +304,7 @@ the area of the resulting UD contour is in kilometres squared.}
 \item{grid - integer}{The number of grid cells for the computed kernel surface. This
 is passed as the \code{grid} argument to \code{\link[adehabitatHR]{kernelUD}}.}
 
-\item{plot_map - logical}{Should a Leaflet map be plotted for each tag data
+\item{plotMap - logical}{Should a Leaflet map be plotted for each tag data
 set? Maps can only be plotted in this way when \link{do_multi_geolocation}
 is called from
 an interactive R script. This argument will be ignored when

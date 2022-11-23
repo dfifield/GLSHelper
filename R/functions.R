@@ -1135,11 +1135,38 @@ weighted.row <- function(df, weights){
 #'   weighting, in order to give \strong{each kernel surface equal weight} in
 #'   the final product.
 #'
-#' @details The intention of this function is to allow the user to combine
-#'   several kernel surfaces (NOT UD contours) into a single composite kernel.
-#'   This problem typically arises when you have individual tracks from
-#'   multiple individual animals and would like to produce a population-wide
+#' @param k an object of class `estUDm`
 #'
+#' @param w a numeric vector of the same length as the number of kernels in `k`.
+#'   This is used to weight datasets that have different sampling frequencies.
+#'
+#' @details The intention of this function is to allow the user to combine
+#'   several kernel surfaces (NOT UD contours) into a single composite kernel
+#'   (which could subsequently be contoured).
+#'   This problem typically arises when you have tracked multiple individual
+#'   animals and would like to produce a population-wide
+#'   kernel surface (and subsequent UD contour). Typically in such situations
+#'   it is desired that each animal's track (or some portion of it, say, winter)
+#'   contribute equally to the composite.
+#'   That is, the animal track is the "sample unit", so to speak with each
+#'   animal contributing equally to the whole. The problem
+#'   that arises is that each animal track may have different numbers of points.
+#'   Blindly throwing the points from all animals into a single kernel analysis
+#'   will give more weight to animals whose track contain more points than others.
+#'
+#'   There are two (non-exclusive) ways in which some animals' tracks may
+#'   contain more points than others:
+#'
+#'   \enumerate{
+#'      \item each animal was at liberty for differing periods of time
+#'      \item animals used different tracking technology or settings. For
+#'         example, some animals carried GLS giving 2 points per day
+#'         whereas others carried GPS giving 12 points per day.
+#'   }
+#'
+#'  If you only have the first problem then set `w` to all `1`'s and
+#'  the function will handle the unequal point numbers. If you also have the
+#'  second problem, then the `w` parameter is designed to solve this.
 #'
 #' The code assumes that k is of class estUDm (see adehabitatHR) and that each of
 #' the individual estUDs in the estUDm structure are the kernels to be combined.
