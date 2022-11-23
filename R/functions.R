@@ -1,3 +1,174 @@
+#' @export
+#' @title Read configuration file
+#'
+#' @description Read a GLSHelper configuration file. Used
+#'    internally and not normally called by the user.
+#'
+#' @param cfgfile \[character]\cr Required. The full pathname of a configuration
+#'    file. If ends in `.xlsx` or `.xls` it is assumed to be an `Excel` file (this is the
+#'    preferred format), otherwise it is assumed to be a text file.
+#'    This file contains one row per GLS data set to
+#'    be processed.
+#'
+#' @details This function is normally called internally by
+#'    `[do_multi_geolocation] to read its configuration info. However, it can
+#'    be useful for the end-user during debugging of config file
+#'    formatting and reading.
+#'
+#'    See the \emph{Configuration file format} section of
+#'    [do_multi_geolocation] for info on column names, data types, and meanings.
+#'
+#'   An example configuration  file is included with this package
+#'   and can be found at the location given by the following command:
+#'
+#' `system.file("extdata", "geolocation_settings.xlsx", package = "GLSHelper")`
+#'
+#'   Note, if you edit a CSV config file with `Excel` bad things may happen to
+#'   the formatting of dates and times.
+#'
+#' @returns A dataframe containing the configuration info.
+#' @author Dave Fifield
+#'
+read_cfg_file <- function(cfgfile){
+
+  if (tools::file_ext(cfgfile) %in% c("xls", "xlsx")){
+    cfgs <- readxl::read_excel(cfgfile,
+      col_types = c(
+        tagName =  "text",
+        include = "logical",
+        lightFile	 =  "text",
+        lThresh	 =  "numeric",
+        maxLightInt	 =  "numeric",
+        removeFallEqui	 =  "logical",
+        fallEquiStart	 =  "date",
+        fallEquiEnd	 =  "date",
+        removeSpringEqui	 =  "logical",
+        springEquiStart	 =  "date",
+        springEquiEnd	 =  "date",
+        doDateFilter	 =  "logical",
+        filterStart = "date",
+        filterEnd = "date",
+        deplStart	 =  "date",
+        deplEnd	 =  "date",
+        deplLat	 =  "numeric",
+        deplLong	 =  "numeric",
+        calibStart	 =  "date",
+        calibEnd	 =  "date",
+        calibLat	 =  "numeric",
+        calibLong	 =  "numeric",
+        elev =  "numeric",
+        keepCalibPoints	 =  "logical",
+        calibAsk	 =  "logical",
+        deplAsk	 =  "logical",
+        createShapefile	 =  "logical",
+        boxcarSmooth	 =  "logical",
+        b_iter = "numeric",
+        b_func	 =  "text",
+        b_width	 =  "numeric",
+        b_pad	 =  "logical",
+        b_w	 =  "text",
+        b_na.rm	 =  "logical",
+        b_anchor.ends	 =  "logical",
+        doSpeedFilter	 =  "logical",
+        maxSpeed	 =  "numeric",
+        removeOutliers	 =  "logical",
+        minX	 =  "numeric",
+        maxX	 =  "numeric",
+        minY	 =  "numeric",
+        maxY	 =  "numeric",
+        doStatPeriods	 =  "logical",
+        Xlim	 =  "text",
+        Ylim	 =  "text",
+        createKernel	 =  "logical",
+        createKernelShapefile	 =  "logical",
+        pcts	 =  "text",
+        projString	 =  "text",
+        h	 =  "numeric",
+        unin	 =  "text",
+        unout =  "text",
+        grid =  "numeric",
+        plotMap = "logical",
+        readActivity = "logical",
+        activityType = "text")
+    )
+  } else { # Text file, assume CSV format
+    cfgs <- readr::read_csv(cfgfile,
+        col_types = readr::cols( tagName =  "c",
+        include = "l",
+        lightFile	 =  "c",
+        lThresh	 =  "i",
+        maxLightInt	 =  "i",
+        removeFallEqui	 =  "l",
+        fallEquiStart	 =  readr::col_date(),
+        fallEquiEnd	 =  readr::col_date(),
+        removeSpringEqui	 =  "l",
+        springEquiStart	 =  readr::col_date(),
+        springEquiEnd	 =  readr::col_date(),
+        doDateFilter	 =  "l",
+        filterStart = readr::col_date(),
+        filterEnd = readr::col_date(),
+        deplStart	 =  readr::col_date(),
+        deplEnd	 =  readr::col_date(),
+        deplLat	 =  "d",
+        deplLong	 =  "d",
+        calibStart	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
+        calibEnd	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
+        calibLat	 =  "d",
+        calibLong	 =  "d",
+        elev =  "d",
+        keepCalibPoints	 =  "l",
+        calibAsk	 =  "l",
+        deplAsk	 =  "l",
+        createShapefile	 =  "l",
+        boxcarSmooth	 =  "l",
+        b_iter = "i",
+        b_func	 =  "c",
+        b_width	 =  "i",
+        b_pad	 =  "l",
+        b_w	 =  "c",
+        b_na.rm	 =  "l",
+        b_anchor.ends	 =  "l",
+        doSpeedFilter	 =  "l",
+        maxSpeed	 =  "d",
+        removeOutliers	 =  "l",
+        minX	 =  "d",
+        maxX	 =  "d",
+        minY	 =  "d",
+        maxY	 =  "d",
+        doStatPeriods	 =  "l",
+        Xlim	 =  "c",
+        Ylim	 =  "c",
+        createKernel	 =  "l",
+        createKernelShapefile	 =  "l",
+        pcts	 =  "c",
+        projString	 =  "c",
+        h	 =  "d",
+        unin	 =  "c",
+        unout =  "c",
+        grid =  "i",
+        plotMap = "l",
+        readActivity = "l",
+        activityType = "c")
+      ) %>%
+          dplyr::mutate(fallEquiStart = as.POSIXct(fallEquiStart, tz = "UTC"),
+             fallEquiEnd = as.POSIXct(fallEquiEnd, tz = "UTC"),
+             springEquiStart = as.POSIXct(springEquiStart, tz = "UTC"),
+             springEquiEnd = as.POSIXct(springEquiEnd, tz = "UTC"),
+             deplStart = as.POSIXct(deplStart, tz = "UTC"),
+             deplEnd = as.POSIXct(deplEnd, tz = "UTC"),
+             filterStart = as.POSIXct(filterStart, tz = "UTC"),
+             filterEnd = as.POSIXct(filterEnd, tz = "UTC"))
+  }
+
+  cfgs <- cfgs %>%
+      # remove rows that are all NA, Excel likes to insert these.
+    dplyr::filter(!dplyr::if_all(dplyr::everything(), is.na)) %>%
+      # projstrings that start with a plus sign need to be quoted to protect
+      # them from Excel. Remove thos quotes here.
+    dplyr::mutate(projString = gsub('"', "", projString))
+
+  cfgs
+}
 
 #' @export
 #' @title Do geolocation for multiple GLS data sets
@@ -334,77 +505,8 @@
 #'}
 do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
                                subset = NULL) {
-  cfgs <- readr::read_csv(cfgfile,
-          col_types =
-    readr::cols( tagName =  "c",
-      include = "l",
-      lightFile	 =  "c",
-      lThresh	 =  "i",
-      maxLightInt	 =  "i",
-      removeFallEqui	 =  "l",
-      fallEquiStart	 =  readr::col_date(),
-      fallEquiEnd	 =  readr::col_date(),
-      removeSpringEqui	 =  "l",
-      springEquiStart	 =  readr::col_date(),
-      springEquiEnd	 =  readr::col_date(),
-      doDateFilter	 =  "l",
-      filterStart = readr::col_date(),
-      filterEnd = readr::col_date(),
-      deplStart	 =  readr::col_date(),
-      deplEnd	 =  readr::col_date(),
-      deplLat	 =  "d",
-      deplLong	 =  "d",
-      calibStart	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
-      calibEnd	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
-      calibLat	 =  "d",
-      calibLong	 =  "d",
-      elev =  "d",
-      keepCalibPoints	 =  "l",
-      calibAsk	 =  "l",
-      deplAsk	 =  "l",
-      createShapefile	 =  "l",
-      boxcarSmooth	 =  "l",
-      b_iter = "i",
-      b_func	 =  "c",
-      b_width	 =  "i",
-      b_pad	 =  "l",
-      b_w	 =  "c",
-      b_na.rm	 =  "l",
-      b_anchor.ends	 =  "l",
-      doSpeedFilter	 =  "l",
-      maxSpeed	 =  "d",
-      removeOutliers	 =  "l",
-      minX	 =  "d",
-      maxX	 =  "d",
-      minY	 =  "d",
-      maxY	 =  "d",
-      doStatPeriods	 =  "l",
-      Xlim	 =  "c",
-      Ylim	 =  "c",
-      createKernel	 =  "l",
-      createKernelShapefile	 =  "l",
-      pcts	 =  "c",
-      projString	 =  "c",
-      h	 =  "d",
-      unin	 =  "c",
-      unout =  "c",
-      grid =  "i",
-      plot_map = "l")
-    ) %>%
-    dplyr::filter(include == TRUE) %>%
-    # remove rows that are all NA, Excel likes to insert these.
-    dplyr::filter(!dplyr::if_all(dplyr::everything(), is.na)) %>%
-    dplyr::mutate(fallEquiStart = as.POSIXct(fallEquiStart),
-             fallEquiEnd = as.POSIXct(fallEquiEnd),
-             springEquiStart = as.POSIXct(springEquiStart),
-             springEquiEnd = as.POSIXct(springEquiEnd),
-             deplStart = as.POSIXct(deplStart),
-             deplEnd = as.POSIXct(deplEnd),
-             filterStart = as.POSIXct(filterStart),
-             filterEnd = as.POSIXct(filterEnd),
-             projString = gsub('"', "", projString)
-           ) %>%
-    dplyr::arrange(tagName)
+  cfgs <- read_cfg_file(cfgfile) %>%
+    dplyr::filter(include == TRUE)
 
   if (!is.null(subset))
     cfgs %<>% dplyr::filter(tagName %in% subset)

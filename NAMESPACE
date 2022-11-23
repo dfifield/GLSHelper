@@ -2,4 +2,5 @@
 
 export(do_multi_geolocation)
 export(plot_activity)
+export(read_cfg_file)
 importFrom(magrittr,"%>%")
