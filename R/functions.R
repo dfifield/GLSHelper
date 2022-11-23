@@ -444,7 +444,7 @@ read_cfg_file <- function(cfgfile){
 #'   \item{grid - integer}{The number of grid cells for the computed kernel surface. This
 #'   is passed as the `grid` argument to \code{\link[adehabitatHR]{kernelUD}}.}
 #'
-#'   \item{plot_map - logical}{Should a Leaflet map be plotted for each tag data
+#'   \item{plotMap - logical}{Should a Leaflet map be plotted for each tag data
 #'    set? Maps can only be plotted in this way when [do_multi_geolocation]
 #'    is called from
 #'    an interactive R script. This argument will be ignored when
@@ -843,7 +843,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   m <- leaflet::addLayersControl(m, overlayGroups = groups,
                     options = leaflet::layersControlOptions(collapsed = FALSE))
 
-  if (cfg$plot_map && !isTRUE(getOption('knitr.in.progress'))) {
+  if (cfg$plotMap && !isTRUE(getOption('knitr.in.progress'))) {
     print(m)
   }
 
@@ -1118,4 +1118,99 @@ plot_activity <- function(dat, plottype = c("p", "l", "b"),
   }
   print(p)
   invisible(p)
+}
+
+
+
+# Function to return weighted mean of a single cell in a set of kernel density
+# surfaces.
+weighted.row <- function(df, weights){
+  return(weighted.mean(df, weights))
+}
+
+#' @export
+#' @title Combine density surfaces
+#'
+#' @description Combine a list of kernel density surfaces into one, using
+#'   weighting, in order to give \strong{each kernel surface equal weight} in
+#'   the final product.
+#'
+#' @details The intention of this function is to allow the user to combine
+#'   several kernel surfaces (NOT UD contours) into a single composite kernel.
+#'   This problem typically arises when you have individual tracks from
+#'   multiple individual animals and would like to produce a population-wide
+#'
+#'
+#' The code assumes that k is of class estUDm (see adehabitatHR) and that each of
+#' the individual estUDs in the estUDm structure are the kernels to be combined.
+#' Normally, in adehabitatHR, estUDm(s) are used to contain the separate kernels
+#' for each animal, but here the elements can be any kernel that we want to
+#' combine.
+#'
+#' Note that each kernel in k must have been estimated on the same grid. There
+#' are currently no checks to ensure this is true. XXX Should really add messages
+#' to tell which surfaces are null and which are being combined (e.g. VHF, Argos,
+#' GPS)
+combine_kernel_density_surfaces <- function(k,  w) {
+
+  if (length(k) != length(w))
+    stop("Length of the kernel list and weights vector are not equal.")
+
+
+	# if any of the density surfaces in k is null, then simply return the first
+	# non-null one.
+	lens <- lapply(k, length)
+  if (all(lens == 0)) {
+  	cat("All elements in list of density surface to be combined is/are NULL. Returning Null as combined kernel.\n")
+  	flush.console()
+		return(NULL)
+  }
+
+	# return the only non-null surface if there is only one
+	if (sum(lens != 0) == 1) {
+		cat("Only one density surface is not NULL. Returning it as combined kernel.\n")
+		flush.console()
+		return(k[[which(lens != 0)]])
+	}
+
+	# multiple (but not all) density surfaces are null. Extract the non-null ones
+	# and weight appropriately
+	if (any(lens == 0)) {
+		cat(paste(sum(lens == 0), " density surfaces to be combined are NULL. Combining non-null ones. "), sep = "")
+		flush.console()
+		k <- k[which(lens != 0)]
+		w <- w[which(lens != 0)]
+	}
+
+  cat(paste("Combining ",  length(k), " density surfaces with sizes ",
+            paste(unlist(lapply(k, function(x) attr(slot(x, "data"), "npoints"))), collapse = " "), " weighted ",
+            paste(w, collapse = ":"), ".\n", sep = ""))
+
+  # set the class properly to make estUDm2spixdf happy
+  class(k) <- "estUDm"
+
+  # convert multiple UDs to a spatial pixels df
+  ii <- estUDm2spixdf(k)@data
+
+  # compute the actual weighting needed. This is a combination of the weighting
+  # supplied by the user and the number of points in each kernel to start with.
+  # If the vector of weights supplied by the user are all 1's then this is just
+  # the number of points in each kernel, which are required to put the peices
+  # together equitably.
+  pts <- laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
+
+  # get the combined weights
+  c.weights <- pts * w
+
+  # merge the data from each kernel weighting the means by the number of points
+  # contributed by each kernel times the user supplied weighting
+  new.data <- apply(ii, 1, weighted.row, c.weights)
+
+  # create a new estUD structure from the original k and replace it's density
+  # surface with the newly created one
+  kern_comb <- k[[1]]
+  slot(kern_comb, "data")$ud <- new.data
+  attr(slot(kern_comb, "data"), "npoints") <- sum(c.weights)
+
+  return(kern_comb)
 }
