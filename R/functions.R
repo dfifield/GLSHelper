@@ -1120,10 +1120,9 @@ plot_activity <- function(dat, plottype = c("p", "l", "b"),
   invisible(p)
 }
 
-
-
 # Function to return weighted mean of a single cell in a set of kernel density
-# surfaces.
+# surfaces. Each column of df (actually a matrix) is the cell values for one
+# kernel. So we collapse seach row into a single value.
 weighted.row <- function(df, weights){
   return(weighted.mean(df, weights))
 }
@@ -1139,7 +1138,9 @@ weighted.row <- function(df, weights){
 #'
 #' @param w a numeric vector of the same length as the number of kernels in `k`.
 #'   This is used to weight datasets that have different sampling frequencies.
-#'
+#' @param npoints a vector of the same length as the number of kernels to combine
+#'   giving the number of points that that were used to create each kernel.
+#' @param verbose if TRUE, extra info is output.
 #' @details The intention of this function is to allow the user to combine
 #'   several kernel surfaces (NOT UD contours) into a single composite kernel
 #'   (which could subsequently be contoured).
@@ -1165,8 +1166,17 @@ weighted.row <- function(df, weights){
 #'   }
 #'
 #'  If you only have the first problem then set `w` to all `1`'s and
-#'  the function will handle the unequal point numbers. If you also have the
-#'  second problem, then the `w` parameter is designed to solve this.
+#'  the function will handle the unequal point numbers.
+#'
+#'  If you also have the second problem, then the `w` parameter is designed to
+#'  solve this. For example, imagine you have a dataset with 2 GLS tracks and
+#'  2 GPS tracks (with a sampling rate of 2 hours) and have created kernels for
+#'  each animal in a single \code{estUDm} object with the two GLS kernels first
+#'  follwed by the 2 GPS kernels. Since GLS provides 2 positions every day
+#'  and the GPS will provide 12 positions every day, then each GLS point is
+#'  "worth" 12 GPS points so we would set w = c(12, 12, 1, 1). Note that the function
+#'  will still handle the unequal numbers of points per track in this case.
+#'
 #'
 #' The code assumes that k is of class estUDm (see adehabitatHR) and that each of
 #' the individual estUDs in the estUDm structure are the kernels to be combined.
@@ -1174,63 +1184,83 @@ weighted.row <- function(df, weights){
 #' for each animal, but here the elements can be any kernel that we want to
 #' combine.
 #'
-#' Note that each kernel in k must have been estimated on the same grid. There
-#' are currently no checks to ensure this is true. XXX Should really add messages
-#' to tell which surfaces are null and which are being combined (e.g. VHF, Argos,
-#' GPS)
-combine_kernel_density_surfaces <- function(k,  w) {
+#' Note that each kernel in k must have been estimated \strong{on the same grid}. There
+#' are currently \strong{no checks} to ensure this is true.
+combine_kernel_density_surfaces <- function(k,  w, npoints = NULL, verbose = FALSE) {
 
-  if (length(k) != length(w))
-    stop("Length of the kernel list and weights vector are not equal.")
+  if (!is.null(npoints)) {
+    if (length(k) != length(w))
+      stop("Length of the kernel list and weights vector are not equal.")
+  } else {
+    if (length(k) != length(w))
+          stop("Length of the kernel list and weights vector are not equal.")
+  }
 
-
-	# if any of the density surfaces in k is null, then simply return the first
-	# non-null one.
+	# if all surfaces are empty, return nULL
 	lens <- lapply(k, length)
   if (all(lens == 0)) {
   	cat("All elements in list of density surface to be combined is/are NULL. Returning Null as combined kernel.\n")
-  	flush.console()
 		return(NULL)
   }
 
 	# return the only non-null surface if there is only one
 	if (sum(lens != 0) == 1) {
 		cat("Only one density surface is not NULL. Returning it as combined kernel.\n")
-		flush.console()
-		return(k[[which(lens != 0)]])
+		return(k[[lens != 0]])
 	}
 
 	# multiple (but not all) density surfaces are null. Extract the non-null ones
 	# and weight appropriately
 	if (any(lens == 0)) {
 		cat(paste(sum(lens == 0), " density surfaces to be combined are NULL. Combining non-null ones. "), sep = "")
-		flush.console()
-		k <- k[which(lens != 0)]
-		w <- w[which(lens != 0)]
+		k <- k[lens != 0]
+		w <- w[lens != 0]
+		npoints <- npoints[lens != 0]
 	}
 
-  cat(paste("Combining ",  length(k), " density surfaces with sizes ",
-            paste(unlist(lapply(k, function(x) attr(slot(x, "data"), "npoints"))), collapse = " "), " weighted ",
-            paste(w, collapse = ":"), ".\n", sep = ""))
+	if (verbose) {
+    if (!is.null(npoints)) {
+      cat(paste("Combining ",  length(k), " density surfaces with sizes ",
+            paste(npoints, collapse = " "), " weighted ",
+        paste(w, collapse = ":"), ".\n", sep = ""))
+    } else {
+     cat(paste("Combining ",  length(k), " density surfaces with sizes ",
+        paste(unlist(lapply(k, function(x) attr(slot(x, "data"), "npoints"))),
+          collapse = " "), " weighted ",
+        paste(w, collapse = ":"), ".\n", sep = ""))
+    }
+	}
 
   # set the class properly to make estUDm2spixdf happy
   class(k) <- "estUDm"
 
-  # convert multiple UDs to a spatial pixels df
+  # convert multiple UDs to a spatial pixels df and grab the data slot
   ii <- estUDm2spixdf(k)@data
 
   # compute the actual weighting needed. This is a combination of the weighting
   # supplied by the user and the number of points in each kernel to start with.
   # If the vector of weights supplied by the user are all 1's then this is just
-  # the number of points in each kernel, which are required to put the peices
+  # the number of points in each kernel, which are required to put the pieces
   # together equitably.
-  pts <- laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
+  if (!is.null(npoints))
+    pts <- npoints
+  else
+    pts <- laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
 
   # get the combined weights
   c.weights <- pts * w
 
   # merge the data from each kernel weighting the means by the number of points
-  # contributed by each kernel times the user supplied weighting
+  # contributed by each kernel times the user supplied weighting. Note that it
+  # may at first seem counter-intuitive to weight by the number of points
+  # and not the inverse of that. However, the values in the cells of each kernel
+  # have already been DOWN-weighted by the number of points in the track as
+  # part of the kernel equation (see "Kernel methods for estimating the
+  # utilization distribution in home-range studies" Worton 1989. Thus within
+  # each kernel the values makes sense on a *relative* scale in comparison to
+  # each other, but this does not hold across kernels. So to place each kernel's
+  # cell values on an equal scale it is required to upweight each cell values
+  # by it's number of points in order to be comparable between kernels.
   new.data <- apply(ii, 1, weighted.row, c.weights)
 
   # create a new estUD structure from the original k and replace it's density
