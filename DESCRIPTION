@@ -1,6 +1,6 @@
 Package: GLSHelper
 Title: Quickly Process Multiple GLS Datasets
-Version: 0.1.0.9003
+Version: 0.1.0.9004
 Authors@R: 
     person("Dave", "Fifield", , "dave.fifield@ec.gc.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-5433-4733"))

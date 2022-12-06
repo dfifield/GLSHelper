@@ -1235,7 +1235,7 @@ combine_kernel_density_surfaces <- function(k,  w, npoints = NULL, verbose = FAL
   class(k) <- "estUDm"
 
   # convert multiple UDs to a spatial pixels df and grab the data slot
-  ii <- estUDm2spixdf(k)@data
+  ii <- adehabitatHR::estUDm2spixdf(k)@data
 
   # compute the actual weighting needed. This is a combination of the weighting
   # supplied by the user and the number of points in each kernel to start with.
@@ -1245,7 +1245,7 @@ combine_kernel_density_surfaces <- function(k,  w, npoints = NULL, verbose = FAL
   if (!is.null(npoints))
     pts <- npoints
   else
-    pts <- laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
+    pts <- plyr::laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
 
   # get the combined weights
   c.weights <- pts * w
@@ -1265,9 +1265,9 @@ combine_kernel_density_surfaces <- function(k,  w, npoints = NULL, verbose = FAL
 
   # create a new estUD structure from the original k and replace it's density
   # surface with the newly created one
-  kern_comb <- k[[1]]
+  kern_comb <- k[[1]] # just to get an estUD object
   slot(kern_comb, "data")$ud <- new.data
-  attr(slot(kern_comb, "data"), "npoints") <- sum(c.weights)
+  attr(slot(kern_comb, "data"), "npoints") <- sum(c.weights) # Store
 
   return(kern_comb)
 }
