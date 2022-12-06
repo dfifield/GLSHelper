@@ -1237,15 +1237,19 @@ combine_kernel_density_surfaces <- function(k,  w, npoints = NULL, verbose = FAL
   # convert multiple UDs to a spatial pixels df and grab the data slot
   ii <- adehabitatHR::estUDm2spixdf(k)@data
 
+  # Get the number of points in each kernel. The "else" case is for kernels
+  # that were created with my kernel "library" that stored the number
+  # of points in each kernel as an attribute of the data slot.
+  if (!is.null(npoints))
+    pts <- npoints
+  else
+    pts <- plyr::laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
+
   # compute the actual weighting needed. This is a combination of the weighting
   # supplied by the user and the number of points in each kernel to start with.
   # If the vector of weights supplied by the user are all 1's then this is just
   # the number of points in each kernel, which are required to put the pieces
   # together equitably.
-  if (!is.null(npoints))
-    pts <- npoints
-  else
-    pts <- plyr::laply(k, function(x) return(attr(slot(x, "data"), "npoints")))
 
   # get the combined weights
   c.weights <- pts * w
