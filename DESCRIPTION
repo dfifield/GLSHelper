@@ -1,6 +1,6 @@
 Package: GLSHelper
 Title: Quickly Process Multiple GLS Datasets
-Version: 0.1.0.9004
+Version: 0.1.1.9004
 Authors@R: 
     person("Dave", "Fifield", , "dave.fifield@ec.gc.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-5433-4733"))
@@ -15,7 +15,7 @@ Description: This package allows you to process many GLS tag datasets quickly
 License: `use_gpl3_license()`
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.2
+RoxygenNote: 7.2.3
 Imports: 
     adehabitatHR,
     dplyr,
@@ -24,10 +24,9 @@ Imports:
     leafem,
     leaflet,
     magrittr,
-    maptools,
     purrr,
     readr,
-    rgdal,
+    sf,
     sp
 Depends: 
     R (>= 2.10)

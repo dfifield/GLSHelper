@@ -31,12 +31,18 @@
 #'
 read_cfg_file <- function(cfgfile){
 
+
   if (tools::file_ext(cfgfile) %in% c("xls", "xlsx")){
+    if(file.opened(cfgfile))
+      stop(sprintf("Could not open configuration file '%s'. Make sure it exists and is not open in Excel!",
+                   cfgfile))
+
     cfgs <- readxl::read_excel(cfgfile,
       col_types = c(
         tagName =  "text",
         include = "logical",
         lightFile	 =  "text",
+        log = "logical",
         lThresh	 =  "numeric",
         maxLightInt	 =  "numeric",
         removeFallEqui	 =  "logical",
@@ -56,6 +62,8 @@ read_cfg_file <- function(cfgfile){
         calibEnd	 =  "date",
         calibLat	 =  "numeric",
         calibLong	 =  "numeric",
+        calibLThresh = "numeric",
+        calibYlim = "text",
         elev =  "numeric",
         keepCalibPoints	 =  "logical",
         calibAsk	 =  "logical",
@@ -77,9 +85,11 @@ read_cfg_file <- function(cfgfile){
         minY	 =  "numeric",
         maxY	 =  "numeric",
         doStatPeriods	 =  "logical",
-        Xlim	 =  "text",
-        Ylim	 =  "text",
+        statXlim	 =  "text",
+        statYlim	 =  "text",
         createKernel	 =  "logical",
+        kernelStart = "date",
+        kernelEnd = "date",
         createKernelShapefile	 =  "logical",
         pcts	 =  "text",
         projString	 =  "text",
@@ -96,6 +106,7 @@ read_cfg_file <- function(cfgfile){
         col_types = readr::cols( tagName =  "c",
         include = "l",
         lightFile	 =  "c",
+        log = "l",
         lThresh	 =  "i",
         maxLightInt	 =  "i",
         removeFallEqui	 =  "l",
@@ -115,6 +126,8 @@ read_cfg_file <- function(cfgfile){
         calibEnd	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
         calibLat	 =  "d",
         calibLong	 =  "d",
+        calibLThresh = "d",
+        calibYlim = "c",
         elev =  "d",
         keepCalibPoints	 =  "l",
         calibAsk	 =  "l",
@@ -136,9 +149,11 @@ read_cfg_file <- function(cfgfile){
         minY	 =  "d",
         maxY	 =  "d",
         doStatPeriods	 =  "l",
-        Xlim	 =  "c",
-        Ylim	 =  "c",
+        statXlim	 =  "c",
+        statYlim	 =  "c",
         createKernel	 =  "l",
+        kernelStart = readr::col_date(),
+        kernelEnd = readr::col_date(),
         createKernelShapefile	 =  "l",
         pcts	 =  "c",
         projString	 =  "c",
@@ -505,17 +520,25 @@ read_cfg_file <- function(cfgfile){
 #'}
 do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
                                subset = NULL) {
+  # Display warnings as soon as they happen
+  opt <- getOption("warn")
+  options(warn = 1)
+
   cfgs <- read_cfg_file(cfgfile) %>%
     dplyr::filter(include == TRUE)
 
   if (!is.null(subset))
     cfgs %<>% dplyr::filter(tagName %in% subset)
 
-  cfgs %>%
+  res <- cfgs %>%
     split(1:nrow(.)) %>%
     purrr::map(do_geolocation, folder = folder, shapefolder = shapefolder) %>%
     purrr::set_names(cfgs$tagName)
+
+  options(warn = opt)
+  res
 }
+
 #' @noRd
 #' @title Do geolocation for one GLS data set
 #'
@@ -566,14 +589,32 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   twiFile <- file.path(tagDir, paste0(cfg$tagName, " twilights.RData"))
   calibLoc <- c(cfg$calibLong, cfg$calibLat)
   w <- as.numeric(unlist(strsplit(cfg$b_w, split = ",")))
-  Xlim <- as.numeric(unlist(strsplit(cfg$Xlim, split = ",")))
-  Ylim <- as.numeric(unlist(strsplit(cfg$Ylim, split = ",")))
+  statXlim <- as.numeric(unlist(strsplit(cfg$statXlim, split = ",")))
+  statYlim <- as.numeric(unlist(strsplit(cfg$statYlim, split = ",")))
+  calibYlim <- as.numeric(unlist(strsplit(cfg$calibYlim, split = ",")))
   pcts <- as.numeric(unlist(strsplit(cfg$pcts, split = ",")))
 
   # read light data, implicitly assumes first row is headers
   # (it is some stuff for BAS loggers which gets ignored)
   message("Reading light data")
-  alldat <- GeoLight::ligTrans(file.path(tagDir, cfg$lightFile))
+  lightfile <- file.path(tagDir, cfg$lightFile)
+  ext <- tools::file_ext(lightfile)
+  if (ext == "lux") {
+    alldat <- GeoLight::luxTrans(lightfile)
+  } else if (ext == "lig")
+    alldat <- GeoLight::ligTrans(lightfile)
+  else if (ext == "gle"){
+    alldat <- GeoLight::gleTrans(lightfile)
+  }  else if (ext == "glf"){
+    alldat <- GeoLight::glfTrans(lightfile)
+  } else {
+    stop(sprintf("GeoLight::do_geolocation(): Unrecognized file extension '%s'."))
+  }
+
+  # do we want to log the light values
+  if (cfg$log) {
+    alldat <- mutate(alldat, light = log(light+0.0001) + abs(min(log(light+0.0001))))
+  }
 
   # read activity data if it exists
   if (cfg$readActivity) {
@@ -602,19 +643,48 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   # calibration
   calib <- dplyr::filter(alldat, datetime >= as.POSIXct(cfg$calibStart, tz = "UTC")
                          & datetime <= as.POSIXct(cfg$calibEnd, tz = "UTC"))
-  plot(calib$datetime, calib$light, type = "l", main = paste0(cfg$tagName, " calibration"))
 
+  if(length(calibYlim) > 1 &&  !any(is.na(calibYlim))) {
+    plot(
+      calib$datetime,
+      calib$light,
+      type = "l",
+      main = paste0(cfg$tagName, " calibration"),
+      ylim = calibYlim
+    )
+  } else {
+    plot(
+      calib$datetime,
+      calib$light,
+      type = "l",
+      main = paste0(cfg$tagName, " calibration")
+    )
+  }
+
+  message("Getting calibration period twilights and positions")
   calibtwi <- GeoLight::twilightCalc(datetime = calib$datetime,
                                      light = calib$light,
-                                     LightThreshold = cfg$lThresh,
+                                     LightThreshold = cfg$calibLThresh,
                                      maxLight = cfg$maxLightInt,
                                      ask = cfg$calibAsk) %>%
     dplyr::mutate(src = "Calib")
 
-  # if no default elev given
+  # If no default elev given then compute from calibration data
+  elev.long <- NA
   if (is.na(cfg$elev)) {
-    elev <- with(calibtwi, GeoLight::getElevation(tFirst, tSecond, type,
-                                  known.coord = calibLoc))
+    message("Getting sun elevation angle")
+    elev <- getElevation(twl = calibtwi,
+                       known.coord = calibLoc,
+                       method = "gamma")
+
+    # New version of getElevation in GeoLight >= 2.0.1 returns a vector with the
+    # elevation angle in second element. Need to check length of elev to
+    # figure out what to do.
+    if (length(elev) > 1){
+      elev.long <- elev
+      elev <- 90-elev[1]
+    }
+
     message(sprintf("Elevation angle calculated from calibration period: %.2f", elev))
   } else {
     elev = cfg$elev
@@ -625,13 +695,22 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   if (cfg$keepCalibPoints) {
     calibCoord <- GeoLight::coord(calibtwi$tFirst, calibtwi$tSecond,
                                   calibtwi$type, degElevation = elev)
+    cat("\n")
     calibPoints <- cbind(calibtwi, calibCoord) %>%
       purrr::set_names(c(names(calibtwi), c("lng", "lat")))
   }
 
+
   dat <- alldat
 
-  # arbitrary date filter useful to exclude as much of at colony time as possible
+  # filter non-deployment dates
+  if (!is.na(cfg$deplStart) && !is.na(cfg$deplEnd)) {
+    dat <- dplyr::filter(dat, datetime >= cfg$deplStart & datetime <=  cfg$deplEnd)
+  } else
+    warning("One of deplStart or deplEnd is blank in the configuration file." %>%
+              paste0(" Will not be able to remove non-deployment periods."))
+
+  # arbitrary date filter useful to exclude at colony time, or delineate wintering area, etc
   if (cfg$doDateFilter) {
     dat <- dplyr::filter(dat, datetime >= cfg$filterStart &
                            datetime <=  cfg$filterEnd)
@@ -650,6 +729,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   }
 
   # get dawn and dusk times for deployment
+  message("Getting deployment period twilights and positions")
   twi <- GeoLight::twilightCalc(datetime = dat$datetime,
                                 light = dat$light,
                                 LightThreshold = cfg$lThresh,
@@ -659,9 +739,11 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # calculate locations
   coord <- GeoLight::coord(twi$tFirst, twi$tSecond, twi$type, degElevation = elev)
+  cat("\n")
 
   # remove points outside specified area?
   if (cfg$removeOutliers) {
+    message("Removing spatial outliers")
     # Remove positions way outside the study area for example on the other side of the world
     cond <- (coord[, 1] >= cfg$minX & coord[, 1] <= cfg$maxX) &
             (coord[, 2] >= cfg$minY & coord[, 2] <= cfg$maxY)
@@ -671,12 +753,15 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # remove unrealistic positions - not sure what distance should be
   if (cfg$doSpeedFilter) {
+    message("Doing speed filtering")
     filt <- NA
     filt <- GeoLight::distanceFilter(twi$tFirst, twi$tSecond, twi$type,
                     degElevation = elev, distance = cfg$maxSpeed, units = "hour")
 
     #Need to check this since sometimes the distance filter fails
-    if (!is.na(filt)) {
+    if (length(filt) == 1 && is.na(filt)) {
+      warning("Speed filter failed.", immediate. = TRUE)
+    } else {
       coord <- coord[filt,]
       twi <- twi[filt,]
     }
@@ -684,9 +769,13 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # get stationary periods?
   if (cfg$doStatPeriods) {
+    message("Doing residency analysis.")
     site <- GeoLight::changeLight(twi$tFirst, twi$tSecond, twi$type,
                               rise.prob = 0.1, set.prob = 0.1, days = 5)$site
-    GeoLight::siteMap(coord, site, xlim = Xlim, ylim = Ylim)
+    if (!is.na(statXlim) && !is.na(statYlim))
+      GeoLight::siteMap(coord, site, xlim = statXlim, ylim = statYlim)
+    else
+      GeoLight::siteMap(coord, site)
   }
 
   # create trajectory
@@ -696,6 +785,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # smoothing - iteratively smooth cfg$b_iter times
   if (cfg$boxcarSmooth) {
+    message("Creating smoothed track")
     smth <- cbind(traj$lng, traj$lat)
     for (i in cfg$b_iter) {
       smth[, 1] <- boxcar(smth[, 1], bfunc =  cfg$b_func, width = cfg$b_width,
@@ -770,7 +860,13 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     leaflet::addMarkers(lng = cfg$deplLong, lat = cfg$deplLat,
                         label = "Deployment location",
                         group = "deploy loc") %>%
-    leaflet::setView(mean(na.omit(traj$lng)), mean(na.omit(traj$lat)), zoom = 5) %>%
+    # leaflet::setView(mean(na.omit(traj$lng)), mean(na.omit(traj$lat)), zoom = 5) %>%
+    leaflet::fitBounds(
+      lng1 = min(traj$lng),
+      lat1 = min(traj$lat),
+      lng2 = max(traj$lng),
+      lat2 = max(traj$lat)
+    ) %>%
     # Monthly colored points
     leaflet::addCircleMarkers(lng = ~lng, lat = ~lat, radius = 3,
                               color = ~pal(month), label = ~tFirst,
@@ -783,13 +879,14 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     leaflet::hideGroup("season") %>%
     leaflet::addLegend("bottomright", pal = pal.season, values = ~season,
                        title = "Season") %>%
-    leaflet::addLegend("topleft", pal = pal, values = ~month, title = "Month") %>%
+    leaflet::addLegend("topleft", pal = pal, values = ~month,
+                       title = paste0(cfg$tagName, "<br>Month")) %>%
     leaflet::addPolylines(data = points_to_line(traj, long = "lng", lat = "lat"),
                           group = "path", weight = 1) %>%
-    leafem::addMouseCoordinates() %>%
-    leaflet::addLabelOnlyMarkers(lng = -62, lat = 53,
-                        label = htmltools::HTML(as.character(htmltools::h1(cfg$tagName))),
-                        labelOptions = leaflet::labelOptions(noHide = TRUE, textOnly = TRUE))
+    leafem::addMouseCoordinates()
+    # leaflet::addLabelOnlyMarkers(lng = -62, lat = 53,
+    #                     label = htmltools::HTML(as.character(htmltools::h1(cfg$tagName))),
+    #                     labelOptions = leaflet::labelOptions(noHide = TRUE, textOnly = TRUE))
 
   # Add smoothed points and path. Hide unsmoothed points and path by default.
   if (cfg$boxcarSmooth){
@@ -818,12 +915,12 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # Create and map kernel UDs
   if (cfg$createKernel) {
-
+    message("Creating kernel UD")
     # create kernel UDSs and convert back to lat long for plotting
     conts <- suppressWarnings(do_kernel(traj, lngcol = lngcol, latcol = latcol,
                                         elev = elev, cfg = cfg,
                                         shapefolder = shapefolder)) %>%
-      purrr::map(~sp::spTransform(., CRSobj = sp::CRS("+proj=longlat +ellps=WGS84")))
+      purrr::map(~sf::st_transform(., crs = sf::st_crs(4326)))
 
 
     groups <- c(groups, "UDs")
@@ -843,10 +940,14 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   m <- leaflet::addLayersControl(m, overlayGroups = groups,
                     options = leaflet::layersControlOptions(collapsed = FALSE))
 
-  if (cfg$plotMap && !isTRUE(getOption('knitr.in.progress'))) {
+  # We only want to print the map now if we are in NOT being knitted/renderec
+  if (cfg$plotMap && (is.null(getOption('knitr.in.progress')) |
+                      !isTRUE(getOption('knitr.in.progress')))) {
+    message("Displaying leaflet map")
     print(m)
   }
 
+  message("All done.")
   list(posns = traj, elev = elev, light = dat,
        act = if(exists("act")) {
          act
@@ -857,19 +958,18 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 }
 
 do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
-  # create spatialpointsdataframe
-  shp <- sp::SpatialPointsDataFrame(cbind(dat[, lngcol], dat[, latcol]),
-                                    data = dat,
-                                    proj4string = sp::CRS("+proj=longlat"))
+  shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = st_crs(4326), remove = FALSE )
+  filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
+                ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
+  message(sprintf("\nCreating point shapefile: %s", filename))
+  st_write(
+    shp,
+    dsn = shapefolder,
+    layer = filename,
+    driver = "ESRI Shapefile",
+    delete_layer = TRUE
+  )
 
-  # create shapefile
-  if (cfg$createShapefile) {
-    filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
-                  ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
-    message(sprintf("\nCreating point shapefile: %s", filename))
-    suppressWarnings(rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
-                    driver = "ESRI Shapefile", overwrite_layer = T))
-  }
   shp
 }
 
@@ -881,6 +981,11 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   dat <- dat %>%
     dplyr::filter(src != "Calib") %>%
     dplyr::mutate(id = 1)
+
+  # filter specified dates if given
+  if (!is.na(cfg$kernelStart) && !is.na(cfg$kernelEnd)) {
+    dat <- dplyr::filter(dat, tFirst >= cfg$kernelStart & tSecond <=  cfg$kernelEnd)
+  }
 
   # Create a projection string assuming a lambert conic is good.
   # Longitude of center is mean of dat longitudes,
@@ -899,28 +1004,38 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
     prjString <- cfg$projString
   }
 
-  shp <- sp::SpatialPointsDataFrame(cbind(dat[, lngcol], dat[, latcol]),
-                                    data = dat,
-                                    proj4string = sp::CRS("+proj=longlat")) %>%
-    sp::spTransform(sp::CRS(prjString))
+  message("\tConverting points to sp object")
+  shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = st_crs(4326)) %>%
+    sf::st_transform(st_crs(prjString)) %>%
+    dplyr::select(id, geometry)
 
-  # kernelUD only wants 1 single animal ID column
-  shp@data <- dplyr::select(dat, id)
+  # Normally I would just pipe the former to as_Spatial() but it has been
+  # causing C_stack_limit errors which usually occur due to infinite recursion so...
+  #
+  # Note: kernelUD only wants 1 single animal ID column
+  shp <-
+    sp::SpatialPointsDataFrame(st_coordinates(shp),
+                               dplyr::select(shp, id) %>% sf::st_drop_geometry(),
+                               proj4string = sp::CRS(prjString))
+
+  message("\tDoing kernelUD")
   kern <- adehabitatHR::kernelUD(shp,
-            h = ifelse(is.na(cfg$h), "href", cfg$h),
-            grid = cfg$grid)
+                                 h = ifelse(is.na(cfg$h), "href", cfg$h),
+                                 grid = cfg$grid)
 
   # create a vector of percents
   pcts <- cfg$pcts %>%
     strsplit(",") %>%
     unlist()
 
+  message("\tGetting volume contours")
   # Generate volume contours
   conts <- pcts %>%
     purrr::map(~ adehabitatHR::getverticeshr(kern, percent = ., unin = cfg$unin, unout = cfg$unout)) %>%
+    purrr::map(sf::st_as_sf) %>%
     purrr::set_names(pcts)
 
-
+  message("\tSaving UDs")
   # Save volume contours, if requested
   if (cfg$createKernelShapefile) {
     purrr::imap(conts, create_kernel_shapefile, cfg = cfg, elev = elev,
@@ -935,8 +1050,13 @@ create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
                 ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""),
                 "_UD_", pct)
   message(sprintf("Creating %s UD shapefile: %s", pct, filename))
-  suppressWarnings(rgdal::writeOGR(obj = shp, dsn = shapefolder, layer = filename,
-                  driver = "ESRI Shapefile", overwrite_layer = T))
+  st_write(
+    shp,
+    dsn = shapefolder,
+    layer = filename,
+    driver = "ESRI Shapefile",
+    delete_layer = TRUE
+  )
 }
 
 # Modified from original by Carl Witthoft.
@@ -1012,45 +1132,12 @@ boxcar <- function(x, width = 5, bfunc = 'mean', pad = TRUE, anchor.ends = TRUE,
   return(boxout)
 }
 
-# Taken from here: https://rpubs.com/walkerke/points_to_line
-points_to_line <- function(data, long, lat, id_field = NULL, sort_field = NULL) {
+# Adapted from here: https://rpubs.com/walkerke/points_to_line
+points_to_line <- function(data, long, lat) {
 
   # Convert to SpatialPointsDataFrame
   sp::coordinates(data) <- c(long, lat)
-
-  # If there is a sort field...
-  if (!is.null(sort_field)) {
-    if (!is.null(id_field)) {
-      data <- data[order(data[[id_field]], data[[sort_field]]), ]
-    } else {
-      data <- data[order(data[[sort_field]]), ]
-    }
-  }
-
-  # If there is only one path...
-  if (is.null(id_field)) {
-
-    lines <- sp::SpatialLines(list(sp::Lines(list(sp::Line(data)), "id")))
-
-    return(lines)
-
-    # Now, if we have multiple lines...
-  } else if (!is.null(id_field)) {
-
-    # Split into a list by ID field
-    paths <- sp::split(data, data[[id_field]])
-
-    sp_lines <- sp::SpatialLines(list(sp::Lines(list(sp::Line(paths[[1]])), "line1")))
-
-    # I like for loops, what can I say...
-    for (p in 2:length(paths)) {
-      id <- paste0("line", as.character(p))
-      l <- sp::SpatialLines(list(sp::Lines(list(sp::Line(paths[[p]])), id)))
-      sp_lines <- maptools::spRbind(sp_lines, l)
-    }
-
-    return(sp_lines)
-  }
+  sp::SpatialLines(list(sp::Lines(list(sp::Line(data)), "id")))
 }
 
 
@@ -1274,4 +1361,17 @@ combine_kernel_density_surfaces <- function(k,  w, npoints = NULL, verbose = FAL
   attr(slot(kern_comb, "data"), "npoints") <- sum(c.weights) # Store
 
   return(kern_comb)
+}
+
+# found at https://stackoverflow.com/questions/44076935/use-r-to-check-and-see-if-a-file-is-open-and-force-close-it
+# Check if a file is open (eg. by Excel). Returns TRUE if open. FALSE otherwise.
+file.opened <- function(path) {
+  suppressWarnings(
+    "try-error" %in% class(
+      try(file(path,
+               open = "r"),
+          silent = TRUE
+      )
+    )
+  )
 }
