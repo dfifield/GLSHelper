@@ -45,6 +45,7 @@ read_cfg_file <- function(cfgfile){
         log = "logical",
         lThresh	 =  "numeric",
         maxLightInt	 =  "numeric",
+        redoTwilights = "logical",
         removeFallEqui	 =  "logical",
         fallEquiStart	 =  "date",
         fallEquiEnd	 =  "date",
@@ -109,6 +110,7 @@ read_cfg_file <- function(cfgfile){
         log = "l",
         lThresh	 =  "i",
         maxLightInt	 =  "i",
+        redoTwilights = "l",
         removeFallEqui	 =  "l",
         fallEquiStart	 =  readr::col_date(),
         fallEquiEnd	 =  readr::col_date(),
@@ -585,8 +587,8 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   message(sprintf("\n\nProcessing tag %s", cfg$tagName))
 
   tagDir <- file.path(folder, cfg$tagName)
-  calibFile <- file.path(tagDir, paste0(cfg$tagName," calibration twilights.RData"))
-  twiFile <- file.path(tagDir, paste0(cfg$tagName, " twilights.RData"))
+  calibFile <- file.path(tagDir, paste0(cfg$tagName," calibration twilights.rds"))
+  twiFile <- file.path(tagDir, paste0(cfg$tagName, " twilights.rds"))
   calibLoc <- c(cfg$calibLong, cfg$calibLat)
   w <- as.numeric(unlist(strsplit(cfg$b_w, split = ",")))
   statXlim <- as.numeric(unlist(strsplit(cfg$statXlim, split = ",")))
@@ -700,7 +702,6 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
       purrr::set_names(c(names(calibtwi), c("lng", "lat")))
   }
 
-
   dat <- alldat
 
   # filter non-deployment dates
@@ -716,26 +717,52 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
                            datetime <=  cfg$filterEnd)
   }
 
+  # Get twilights
+  if (!cfg$redoTwilights && file.exists(twiFile)) {
+    message("Loading existing twilights")
+    twi <- readRDS(twiFile)
+  } else {
+    # Are we here because use wanted to or b/c twiFile didn't exist
+    if (!cfg$redoTwilights)
+      message(sprintf("Couldn't load twilight file '%s', redoing twilights...",
+                      twiFile))
+    else
+      message("Getting twilights")
+
+    tagdata <- dat %>%
+      dplyr::select(datetime, light) %>%
+      dplyr::rename(Date = datetime,
+                    Light = light)
+
+    # get twilights and convert to GeoLight format
+    twi <- TwGeos::preprocessLight(tagdata,
+                                   threshold = cfg$lThresh,
+                                   lmax = cfg$lThresh * 1.1, # make sure threshold is in the plot
+                                   offset = 12) %>%
+      dplyr::filter(!Deleted) %>%
+      TwGeos::export2GeoLight() %>%
+      dplyr::mutate(src = "Deployment") # mark these as deployment period
+    saveRDS(twi, twiFile)
+  }
+  # twi <- GeoLight::twilightCalc(datetime = dat$datetime,
+  #                               light = dat$light,
+  #                               LightThreshold = cfg$lThresh,
+  #                               maxLight = cfg$maxLightInt,
+  #                               ask = cfg$deplAsk) %>%
+  # dplyr::mutate(src = "Deployment") # mark these as deployment period
+
+
   # remove spring Equinox
   if (cfg$removeSpringEqui) {
-    dat <- dplyr::filter(dat, datetime <= cfg$springEquiStart |
-                           datetime >= cfg$springEquiEnd)
+    twi <- dplyr::filter(twi, tFirst <= cfg$springEquiStart |
+                           tSecond >= cfg$springEquiEnd)
   }
 
   # remove fall Equinox
   if (cfg$removeFallEqui) {
-    dat <- dplyr::filter(dat, datetime <= cfg$fallEquiStart |
-                           datetime >= cfg$fallEquiEnd)
+    twi <- dplyr::filter(twi, tFirst <= cfg$fallEquiStart |
+                           tSecond >= cfg$fallEquiEnd)
   }
-
-  # get dawn and dusk times for deployment
-  message("Getting deployment period twilights and positions")
-  twi <- GeoLight::twilightCalc(datetime = dat$datetime,
-                                light = dat$light,
-                                LightThreshold = cfg$lThresh,
-                                maxLight = cfg$maxLightInt,
-                                ask = cfg$deplAsk) %>%
-    dplyr::mutate(src = "Deployment") # mark these as deployment period
 
   # calculate locations
   coord <- GeoLight::coord(twi$tFirst, twi$tSecond, twi$type, degElevation = elev)
