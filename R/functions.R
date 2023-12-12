@@ -101,6 +101,7 @@ read_cfg_file <- function(cfgfile){
         readActivity = "logical",
         activityType = "text")
     )
+  } else { # Text file, assume CSV format
     cfgs <- readr::read_csv(cfgfile,
         col_types = readr::cols( tagName =  "c",
         include = "l",
