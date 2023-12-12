@@ -6,7 +6,14 @@
 \alias{GLSHelper-package}
 \title{GLSHelper: Quickly Process Multiple GLS Datasets}
 \description{
-This package allows you to process many GLS tag datasets quickly with a single function call. Internally it uses the GeoLight package to perform the computations. It uses a configuration file (CSV format) to specify options for each tag dataset. It includes options for selecting light thresholds, removing equinoxes, date filtering, speed filtering, outlier removal, sliding window smoothing, creating any number of kernel UD contours, writing points and kernel UDs to shapefiles, ploting activity (wet/dry) data, and producing a leaflet map.
+This package allows you to process many GLS tag datasets quickly
+    with a single function call. Internally it uses the GeoLight
+    package to perform the computations. It uses a configuration file (CSV format) to
+    specify options for each tag dataset. It includes options for selecting light
+    thresholds, removing equinoxes, date filtering, speed filtering, outlier removal,
+    sliding window smoothing, 
+    creating any number of kernel UD contours, writing points and kernel UDs to
+    shapefiles, ploting activity (wet/dry) data, and producing a leaflet map.
 }
 \author{
 \strong{Maintainer}: Dave Fifield \email{dave.fifield@ec.gc.ca} (\href{https://orcid.org/0000-0001-5433-4733}{ORCID})

@@ -724,7 +724,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   # Get twilights
   if (!cfg$doTwilights) {
     if (file.exists(twiFile)) {
-      message("Loading existing twilights")
+      message("Loading existing twilights from %s", twFile)
       twi <- readRDS(twiFile)
     } else {
       stop(sprintf("Could not find previously saved twilight file '%s'", twiFile))
@@ -892,7 +892,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
                         label = "Calibration location", group = "calib loc")
 
   # Add deployment marker
-  if (!is.na(deplLong) && !is.na(deplLat)) {
+  if (!is.na(cfg$deplLong) && !is.na(cfg$deplLat)) {
     m <- leaflet::addMarkers(
       m,
       lng = cfg$deplLong,
