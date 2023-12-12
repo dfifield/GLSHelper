@@ -20,7 +20,6 @@ Imports:
     adehabitatHR,
     dplyr,
     GeoLight,
-    TwGeos,
     htmltools,
     leafem,
     leaflet,
