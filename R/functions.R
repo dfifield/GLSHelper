@@ -288,6 +288,9 @@ read_cfg_file <- function(cfgfile){
 #'   \item{calibLat, calibLong - numeric, required}{Coordinates of the calibration location. All geographic
 #'     coordinates are assumed to reference the WGS84 datum.}
 #'
+#'   \item{calibLThresh - numeric, optional}{Light threshold for calibration data.
+#'      If \code{NA} then the value of \code{lThresh} is used instead.}
+#'
 #'   \item{elev - numeric, optional}{The sun elevation angle when `lThresh` units of light
 #'      are recorded. Leave blank (normal case) to have this computed from the
 #'      calibration data.}
@@ -667,6 +670,11 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   }
 
   message("Getting calibration period twilights and positions")
+
+  # Check for calibration threshold specified.
+  if (is.na(cfg$calibLThresh))
+    cfg$calibLThresh <- cfg$lThresh
+
   calibtwi <- GeoLight::twilightCalc(datetime = calib$datetime,
                                      light = calib$light,
                                      LightThreshold = cfg$calibLThresh,
@@ -678,7 +686,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   elev.long <- NA
   if (is.na(cfg$elev)) {
     message("Getting sun elevation angle")
-    elev <- getElevation(twl = calibtwi,
+    elev <- GeoLight::getElevation(twl = calibtwi,
                        known.coord = calibLoc,
                        method = "gamma")
 
@@ -709,7 +717,11 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   # filter non-deployment dates
   if (!is.na(cfg$deplStart) && !is.na(cfg$deplEnd)) {
+    message("Filtering by deployment dates")
     dat <- dplyr::filter(dat, datetime >= cfg$deplStart & datetime <=  cfg$deplEnd)
+
+    if (nrow(dat) == 0)
+      stop("There is no data left after filtering by deployment date.")
   } else
     warning("One of deplStart or deplEnd is blank in the configuration file." %>%
               paste0(" Will not be able to remove non-deployment periods."))
@@ -718,20 +730,26 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   if (cfg$doDateFilter) {
     dat <- dplyr::filter(dat, datetime >= cfg$filterStart &
                            datetime <=  cfg$filterEnd)
+
+    if (nrow(dat) == 0)
+      stop("There is no data left after applying date filter.")
   }
 
 
   # Get twilights
   if (!cfg$doTwilights) {
+    message("Since 'doTwilights' is FALSE, attempting to load existing twilights from ", twiFile)
     if (file.exists(twiFile)) {
-      message("Loading existing twilights from %s", twFile)
       twi <- readRDS(twiFile)
     } else {
       stop(sprintf("Could not find previously saved twilight file '%s'", twiFile))
     }
-  } else {
-    message("Loading twilights from ", twiFile)
 
+    if (nrow(twi) == 0)
+      stop("There is no twilight data after loading twilights.")
+
+  } else {
+    message("Running GeoLight::preprocessLight to get twilights...")
     tagdata <- dat %>%
       dplyr::select(datetime, light) %>%
       dplyr::rename(Date = datetime,
@@ -749,7 +767,12 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
       TwGeos::export2GeoLight() %>%
       dplyr::mutate(src = "Deployment") # mark these as deployment period
     saveRDS(twi, twiFile)
+
+    if (nrow(twi) == 0)
+      stop("There is no twilight data left after defining twilights and filtering out deleted ones.")
+
   }
+
   # twi <- GeoLight::twilightCalc(datetime = dat$datetime,
   #                               light = dat$light,
   #                               LightThreshold = cfg$lThresh,
@@ -762,12 +785,20 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   if (cfg$removeSpringEqui) {
     twi <- dplyr::filter(twi, tFirst <= cfg$springEquiStart |
                            tSecond >= cfg$springEquiEnd)
+
+    if (nrow(twi) == 0)
+      stop("There is no twilight data left after removing spring equinox.")
+
   }
 
   # remove fall Equinox
   if (cfg$removeFallEqui) {
     twi <- dplyr::filter(twi, tFirst <= cfg$fallEquiStart |
                            tSecond >= cfg$fallEquiEnd)
+
+    if (nrow(twi) == 0)
+      stop("There is no twilight data left after removing fall equinox.")
+
   }
 
   # calculate locations
@@ -782,6 +813,13 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
             (coord[, 2] >= cfg$minY & coord[, 2] <= cfg$maxY)
     coord <- coord[cond, ]
     twi <- twi[cond, ]
+
+    if (nrow(twi) == 0)
+      stop("There is no twilight data left after removing outliers.")
+
+    if (nrow(coord) == 0)
+      stop("There is no coordinate data left after removing outliers.")
+
   }
 
   # remove unrealistic positions - not sure what distance should be
@@ -797,6 +835,13 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     } else {
       coord <- coord[filt,]
       twi <- twi[filt,]
+
+      if (nrow(twi) == 0)
+        stop("There is no twilight data left after speed filter.")
+
+      if (nrow(coord) == 0)
+        stop("There is no coordinate data left after speed filter.")
+
     }
   }
 
@@ -1005,7 +1050,7 @@ do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = st_crs(4326), remove = FALSE )
   filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
                 ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
-  message(sprintf("\nCreating point shapefile: %s", filename))
+  message(sprintf("Creating point shapefile: %s", filename))
   st_write(
     shp,
     dsn = shapefolder,

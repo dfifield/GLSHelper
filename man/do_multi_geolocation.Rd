@@ -133,6 +133,9 @@ Start/end date/time of the calibration (ie, ground-truthing) period.}
 \item{calibLat, calibLong - numeric, required}{Coordinates of the calibration location. All geographic
 coordinates are assumed to reference the WGS84 datum.}
 
+\item{calibLThresh - numeric, optional}{Light threshold for calibration data.
+If \code{NA} then the value of \code{lThresh} is used instead.}
+
 \item{elev - numeric, optional}{The sun elevation angle when \code{lThresh} units of light
 are recorded. Leave blank (normal case) to have this computed from the
 calibration data.}
