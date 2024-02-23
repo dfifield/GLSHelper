@@ -98,7 +98,7 @@ maximum light interval - typically 10, 5, or 2. This corresponds to the
 \item{doTwilights - logical, required}{Whether to do the twilight annotation process. If \code{TRUE}
 \code{\link[TwGeos]{preprocessLight}} is invoked to interactively annotate
 twilights (see \url{https://geolocationmanual.vogelwarte.ch/twilight.html}).
-Once twilights have been annotated, the are save in \code{tagName twilights.rds} in the
+Once twilights have been annotated, they are saved in \code{tagName twilights.rds} in the
 the tag's data folder for future use. If \code{FALSE}, the twilights are read from
 the previously saved file.}
 

@@ -253,7 +253,7 @@ read_cfg_file <- function(cfgfile){
 #'   \item{doTwilights - logical, required}{Whether to do the twilight annotation process. If \code{TRUE}
 #'      \code{\link[TwGeos]{preprocessLight}} is invoked to interactively annotate
 #'      twilights (see \url{https://geolocationmanual.vogelwarte.ch/twilight.html}).
-#'      Once twilights have been annotated, the are save in \code{tagName twilights.rds} in the
+#'      Once twilights have been annotated, they are saved in \code{tagName twilights.rds} in the
 #'      the tag's data folder for future use. If \code{FALSE}, the twilights are read from
 #'      the previously saved file.}
 #'
@@ -686,10 +686,30 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   elev.long <- NA
   if (is.na(cfg$elev)) {
     message("Getting sun elevation angle")
-    elev <- GeoLight::getElevation(twl = calibtwi,
-                       known.coord = calibLoc,
-                       method = "gamma")
 
+    pkg <- installed.packages()
+    pkg <- pkg[pkg[,"Package"] == "GeoLight", ]
+    if ((length(pkg) > 0) && (pkg["Version"] >= "2.0.1")) {
+      # New style getElevation call
+      elev <- try(GeoLight::getElevation(twl = calibtwi,
+                                     known.coord = calibLoc,
+                                     method = "gamma"), silent = TRUE)
+
+      # Check for getElevation crash.
+      if (inherits(elev,"try-error")) {
+        paste0("GeoLight::getElevation() failed when attempting to calculate the sun elevation angle") %>%
+          paste0(" from your calibration data.\n\nYou have Version >= 2.0.1 of the GeoLight package installed.") %>%
+          paste0(" There is a bug in version 2.0.1 (see https://github.com/slisovski/GeoLight/issues/3)") %>%
+          paste0(" that may prevent GeoLight::getElevation() from working properly if your calibration data is close in time to an equinox.") %>%
+          paste0(" \n\nAs a workaround, you can download version 2.0.0 of GeoLight from https://cran.r-project.org/src/contrib/Archive/GeoLight/") %>%
+          paste0(" and install it with devtools::install_local(). Alternatively, you can try using calibration") %>%
+          paste0(" data that is further in time from the equinox.") %>%
+          stop(call. = FALSE)
+      }
+    } else {
+     elev <- GeoLight::getElevation(twl = calibtwi,
+                                     known.coord = calibLoc)
+    }
     # New version of getElevation in GeoLight >= 2.0.1 returns a vector with the
     # elevation angle in second element. Need to check length of elev to
     # figure out what to do.
@@ -1047,11 +1067,11 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 }
 
 do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
-  shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = st_crs(4326), remove = FALSE )
+  shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = sf::st_crs(4326), remove = FALSE )
   filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
                 ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
   message(sprintf("Creating point shapefile: %s", filename))
-  st_write(
+  sf::st_write(
     shp,
     dsn = shapefolder,
     layer = filename,
@@ -1094,8 +1114,8 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   }
 
   message("\tConverting points to sp object")
-  shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = st_crs(4326)) %>%
-    sf::st_transform(st_crs(prjString)) %>%
+  shp <- sf::st_as_sf(dat, coords = c(lngcol, latcol), crs = sf::st_crs(4326)) %>%
+    sf::st_transform(sf::st_crs(prjString)) %>%
     dplyr::select(id, geometry)
 
   # Normally I would just pipe the former to as_Spatial() but it has been
@@ -1103,7 +1123,7 @@ do_kernel <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   #
   # Note: kernelUD only wants 1 single animal ID column
   shp <-
-    sp::SpatialPointsDataFrame(st_coordinates(shp),
+    sp::SpatialPointsDataFrame(sf::st_coordinates(shp),
                                dplyr::select(shp, id) %>% sf::st_drop_geometry(),
                                proj4string = sp::CRS(prjString))
 
@@ -1139,7 +1159,7 @@ create_kernel_shapefile <- function(shp, pct, cfg, elev, shapefolder) {
                 ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""),
                 "_UD_", pct)
   message(sprintf("Creating %s UD shapefile: %s", pct, filename))
-  st_write(
+  sf::st_write(
     shp,
     dsn = shapefolder,
     layer = filename,
