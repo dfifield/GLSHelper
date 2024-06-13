@@ -616,7 +616,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   }  else if (ext == "glf"){
     alldat <- GeoLight::glfTrans(lightfile)
   } else {
-    stop(sprintf("GeoLight::do_geolocation(): Unrecognized file extension '%s'."))
+    stop(sprintf("GLSHelper::do_geolocation(): Unrecognized file extension '%s'."))
   }
 
   # do we want to log the light values
