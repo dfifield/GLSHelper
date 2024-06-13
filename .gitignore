@@ -5,3 +5,11 @@
 /tests/
 *.RData
 /GeoLight_2.0.0.tar.gz
+*.asv
+*.bak
+menu_activex1
+menu_activex2
+menu_activex3
+schema.ini
+*.dll
+tempsst

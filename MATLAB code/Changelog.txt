@@ -1,0 +1,101 @@
+Version 1.0
+
+10 Mar 2009
+	- added feature to increase latitudinal search limits when both max index1 and max index2 are 0. Ie. no
+	  matching temperatures. This helps to get it out of being stuck in a inappropriate local area.
+
+26 Feb 2009
+	- added outputing of temp sampling freq (if constant).
+
+15 Feb 2009
+	- added support for BAS loggers. Added support to compute indices differently since there is no secs_per_temp
+	  and don't know proportion of day spent at given temp.
+
+	- added ability to compute secs_per_temp automatically for geoltv2 loggers which have date info in temp
+	  file.
+
+9 Feb 2009
+	- added msgbox to tell when sat image dates from filename and info header don't match
+	- added Temperature File Type button group to select different format temp files (incomplete)
+
+Jan 7, 2009
+	- latitude was slowly creeping south one pixel at a time when there is a string of positions in a row 
+	  with where the index3 scores are equal for all pixels (ie. 121 tied). Was due to neglecting to subtract
+	  1 when calculating the index of the median pixel (start + offset -1) 
+
+
+Jan 6, 2009
+	- added a "lat" column to output, set to lat_sst by default. I'll fill in either lat_light or lat_sst by hand
+	  after examining.
+
+	- incorporated export_posn code directly into compute_SST_lat such that each position is output as it is
+	  computed, negating the need to wait till all positions have been processed before any output is generated.
+	  Especially usefull if it crashes part way through - at least you get what output you have so far.
+
+
+Jan 5, 2009
+	- added ability to deal with European floating point numbers in Geo_LT raw temp read. (ie. convert 21,275
+	  to 21.275).
+
+Version 0.99
+Oct 7, 2008
+	- added feature to extract on surface temperatures from logger temp data.
+
+Oct 3, 2008
+	- enabled feature to ignore pixels where cloud/land > 80%.
+
+Sept 29, 2008
+	- added ability to read temperature files that contain just a single temperature per line with no date/time
+	  info. GUI now contains box for start date/time.
+
+Sept 27, 2008
+	- added ability to work with zipped (.bz2) SST satelite files without having to unzip them by hand. The code
+	  copies and unzips each required file to a temporary location (.\tempsst) as necessary.
+
+June 11, 2008
+	- modified compute_SST_lat to only compute index2 and index3 for tied index1 and index2 pixels respecitively
+
+June 5, 2008
+	- figure out what to do about NaNs in index3 when comparing distributions. search areas with lots of NaNs
+	  are being favoured since there are few actual SSTs drawn and thus few terms in the sum of squares
+	  calcualtion, making the result small and thus selected for. Solution: compute sum of squares based only 
+	  on list of SST measured by logger instead of all SSTs measure by logger AND satellite. This makes the
+	  number of sum of square terms equal for all pixels. Still not sure what Teo intended.
+
+May 2008
+	- added index3
+
+April 30, 2008
+	- added daily latitudinal limit feature.
+
+April 20, 2008
+	- discovered search box width and height were reversed due to bug in get_bbox. Fixed.
+	- tested effect of different size and shape search areas. Smaller gives tighter placement but is more 
+	  likely to be unable to find a matching search box at all. Larger tends to give more dispersed positions
+	  but fails to find SST based posn less often.
+
+April 12, 2008
+	- modified SST reading procedure: read all headers of HDF files at start and save. Use these to look for
+	  SST datasets on the fly as needed.
+	
+	- installed bzip to handle bz2 files.
+April 9, 2008
+	- added fill_in_SST_temp which checks search area to see if SST temperatures have previously been computed 
+	  for pixels of interest and only fills in those (from slope intercept form) that haven't previously been
+	  done.
+
+	- finished converting to reading in one SST dataset at a time.
+
+April 8, 2008
+	- added find_and_read_SST_file to load the correct SST dataset from satellite files on demand. Called from
+	  compute_SST_lat each time the current SST data doesn't cover the current day being processed.
+
+
+Dec 31, 2007
+	- added fields to gui for search box size, delta temp, SST dir.
+
+	- added progress messages to read_SST_data
+
+	- changed default value for missing temperature to NaN from -100.0 - needs testing
+
+	- added code to compute_SST_lat to look for SST data set for each day processed - partially tested

@@ -1,2 +1,3 @@
-^GLSHelper\.Rproj$
 ^\.Rproj\.user$
+^.*\.Rproj$
+^LICENSE\.md$

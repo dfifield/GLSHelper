@@ -1,0 +1,55 @@
+26 Feb 2009
+	- add option to collect status messages into a logfile.
+
+15 Feb 2009
+	- go through some days when index2 are all 0 and index3 all equal (but not zero??) and see why not. This
+	  is the basis for widening the search range but not sure it's working right. Or is it only if a daily 
+	  position doesn't exist. At any rate decide if this median position chosen should be accepted or 
+	  declared unable to find (ie. set lat = 100).
+
+28 Jan 2009
+	- add option to only process certain date range of input file.
+
+
+Jan 6, 2009
+	- add code to import entire original multitrace output to avoid having to first import to access then 
+	  export posns for SST corr. 
+
+Jan 5, 2009
+	- daily lat limits are supposed to increase for each day that a position doesnt exist - ie if the 
+	  tuna didn't surface. I don't think this is applicable here.
+	  
+	- add ability to get position data directly from Access dbase.
+
+	- add ability to put SST position data directly back into Access dbase.
+
+	- deal with positions that are more than 80 % cloud. See line 182 in compute_SST_lat
+
+	- interposition latitude limit should not be in effect for first position (but it is). Need to fix.
+	  Add an option to use the Start position as the first good lat?
+
+Oct 9, 2008
+	- compare doing 100 samples of size 50 in index_3 with doing a single sample of 5000
+
+Oct 8, 2008
+	- add a "header lines" option for position and temp file. # of lines to ignore at top of file.
+Oct 3, 2008
+	- need to think about what temperatures are being used from the logger for a given position. Should it be
+	  only temperatures measured between sunrise and sunset (or vice versa), if known. Ie. that's the period
+	  during which the light was measured to compute this point so those are the temperatures that should be used.
+	  to do this you need to know the sunrise and set times used to compute the position. Teo couldn't have known
+	  this for Lotek loggers. What did he do?
+
+
+Sept 27, 2008
+	- find better way to deal with storing options. Appdata
+
+
+May 1, 2008
+	- find a way to speed up reading in temperatures. See position reading code.
+
+Dec 27, 2007
+
+	- find out what size search box Scott used
+
+	- find out what temperature data I sent Scott.  Did I filter out times when the bird was flying?

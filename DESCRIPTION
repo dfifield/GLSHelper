@@ -1,5 +1,5 @@
 Package: GLSHelper
-Title: Quickly Process Multiple GLS Datasets
+Title: Quickly Process Multiple GLS Datasets and Perform SST Correction
 Version: 0.1.2
 Authors@R: 
     person("Dave", "Fifield", , "dave.fifield@ec.gc.ca", role = c("aut", "cre"),
@@ -9,8 +9,7 @@ Description: This package allows you to process many GLS tag datasets quickly
     package to perform the computations. It uses a configuration file (CSV format) to
     specify options for each tag dataset. It includes options for selecting light
     thresholds, removing equinoxes, date filtering, speed filtering, outlier removal,
-    sliding window smoothing, 
-    creating any number of kernel UD contours, writing points and kernel UDs to
+    sliding window smoothing, creating any number of kernel UD contours, writing points and kernel UDs to
     shapefiles, ploting activity (wet/dry) data, and producing a leaflet map.
 License: `use_gpl3_license()`
 Encoding: UTF-8
@@ -31,3 +30,6 @@ Imports:
     TwGeos
 Depends: 
     R (>= 2.10)
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
