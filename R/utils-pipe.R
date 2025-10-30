@@ -2,6 +2,9 @@
 #'
 #' See \code{magrittr::\link[magrittr:pipe]{\%>\%}} for details.
 #'
+#'
+#' # comment to make git smarten up
+#'
 #' @name %>%
 #' @rdname pipe
 #' @keywords internal
