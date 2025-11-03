@@ -54,7 +54,9 @@ optional date filtering.}
 }
 \description{
 Process multiple GLS logger raw light data sets according to
-settings given in a configuration file.
+settings given in a configuration file, following the procedure set out
+in \href{https://geolocationmanual.vogelwarte.ch/}{Light level geolocation analysis}
+using the the \href{https://github.com/SLisovski/GeoLight}{\pkg{GeoLight}} package.
 }
 \details{
 This function
@@ -83,9 +85,39 @@ way to exclude/include certain tags.}
 \item{lightFile - character, required}{The name of the file containing
 the light level data. eg., \code{"MK3005 050_000.lig"}.}
 
-\item{log - logical, required}{Whether the raw light values should be log transformed.
-This is common for devices that record the entire range of light intensities
-such as the Migrate Technology Integeo series tags.}
+\item{log - logical, required}{Should raw light values should be log transformed?
+For devices that record the entire range of light intensities (e.g.,
+the Migrate Technology Integeo series tags) log transformation allows you to
+more easily visualize the low light values around twilight. Choose one of:
+\itemize{
+\item TRUE – log transforms raw light values via:
+\cr\cr
+\code{transform_value = log(raw_light_value + 0.0001) + abs(min(log(raw_light_value+0.00001)))}
+\cr\cr
+For the origin of this code, see
+\href{https://geolocationmanual.vogelwarte.ch/loadingData.html}{Chapter 3 Loading data} in "Light-Level Geolocator Analyses".
+The derivation of the two halves of this formula is as follows:
+\enumerate{
+\item	\code{log(raw_light_value + 0.0001)} avoids taking log of numbers <= 0. At night, raw light values (i.e., \code{raw_light_value})
+can be 0 or even a very small
+negative number (ie. much less than 0.001) so we add 0.0001 to
+avoid values that cannot be log transformed.
+\item	\code{abs(min(log(raw_light_value+0.00001)))} avoids negative transformed values.
+Note that if any of (raw_light_value + 0.001) < 1, then just
+taking log(raw_light_value + 0.001) would produce
+negative transformed light values,  which may be undesirable. Adding
+abs(min(log(raw_light_value+0.00001))) ensures that the
+transformed values are all >= 0. However, if  min(raw_light_value
++ 0.0001) happens to be > 1, then log(raw_light_value + 0.0001)
+will already be positive and then adding
+abs(min(log(raw_light_value+0.00001))) will shift it in the
+positive direction even more such that the minimum of the
+resulting transformed values will be > 0, which may at first come
+as a surprise.
+}
+\item FALSE – raw light values are not log transformed.
+}
+}
 
 \item{lThresh - integer, required}{The light threshold level for dawn/dusk. See
 \code{\link[GeoLight]{twilightCalc}} in the \pkg{GeoLight} package
