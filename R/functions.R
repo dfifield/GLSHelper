@@ -44,7 +44,6 @@ read_cfg_file <- function(cfgfile){
         lightFile	 =  "text",
         log = "logical",
         lThresh	 =  "numeric",
-        maxLightInt	 =  "numeric",
         doTwilights = "logical",
         removeFallEqui	 =  "logical",
         fallEquiStart	 =  "date",
@@ -63,11 +62,9 @@ read_cfg_file <- function(cfgfile){
         calibEnd	 =  "date",
         calibLat	 =  "numeric",
         calibLong	 =  "numeric",
-        calibLThresh = "numeric",
         calibYlim = "text",
         elev =  "numeric",
         keepCalibPoints	 =  "logical",
-        calibAsk	 =  "logical",
         createShapefile	 =  "logical",
         boxcarSmooth	 =  "logical",
         b_iter = "numeric",
@@ -108,7 +105,6 @@ read_cfg_file <- function(cfgfile){
         lightFile	 =  "c",
         log = "l",
         lThresh	 =  "d",
-        maxLightInt	 =  "d",
         doTwilights = "l",
         removeFallEqui	 =  "l",
         fallEquiStart	 =  readr::col_date(),
@@ -127,11 +123,9 @@ read_cfg_file <- function(cfgfile){
         calibEnd	 =  readr::col_datetime(format = "%Y-%m-%d %H:%M"),
         calibLat	 =  "d",
         calibLong	 =  "d",
-        calibLThresh = "d",
         calibYlim = "c",
         elev =  "d",
         keepCalibPoints	 =  "l",
-        calibAsk	 =  "l",
         createShapefile	 =  "l",
         boxcarSmooth	 =  "l",
         b_iter = "i",
@@ -188,7 +182,7 @@ read_cfg_file <- function(cfgfile){
 #' @export
 #' @title Do geolocation for multiple GLS data sets
 #'
-#' @description Process multiple GLS logger raw light data sets according to
+#' @description Process multiple GLS logger raw light datasets according to
 #'    settings given in a configuration file, following the procedure set out
 #'    in \href{https://geolocationmanual.vogelwarte.ch/}{Light level geolocation analysis}
 #'    using the the \href{https://github.com/SLisovski/GeoLight}{\pkg{GeoLight}} package.
@@ -223,8 +217,8 @@ read_cfg_file <- function(cfgfile){
 #'   The names, data types, and meanings of the columns in the configuration file
 #'   file are documented in the list below in the order they appear in the file.
 #'
-#'   Example configuration CSV and Excel files are included with this package
-#'   and can be found in the folder given by the following commands:
+#'   Example configuration files in CSV and Excel formats are included with this package
+#'   and can be found in the folder returned by:
 #'
 #' `system.file("extdata", "geolocation_settings.csv", package = "GLSHelper")`
 #'
@@ -274,7 +268,8 @@ read_cfg_file <- function(cfgfile){
 #'     }
 #'   }
 #'
-#'   \item{lThresh - integer, required}{The light threshold level for dawn/dusk. See
+#'   \item{lThresh - numeric, required}{The light threshold level for dawn/dusk.
+#'     If \code{log} is \code{TRUE} then this must be on the log scale. See
 #'     \href{https://geolocationmanual.vogelwarte.ch/twilight.html}{Chapter 4: Twilight
 #'     annotation} in the \href{https://geolocationmanual.vogelwarte.ch}{Light level geolocation analysis}
 #'     manual for more info.}
@@ -534,6 +529,8 @@ read_cfg_file <- function(cfgfile){
 #' @section Author: Dave Fifield
 #'
 #' @examples
+#'
+#' #
 #' res <- do_multi_geolocation(folder = here::here("Data/Tag data"),
 #'                             cfgfile = here::here("Data/geolocation_settings.csv"),
 #'                             shapefolder = here::here("GIS/Shapefiles"))
@@ -550,11 +547,11 @@ read_cfg_file <- function(cfgfile){
 #'   html <- list()
 #'   for (i in 1:length(res)) {
 #'     html <- list(html,
-#'                  h2(paste0(i, "_", names(res)[i])),
+#'                  htmltools::h2(paste0(i, "_", names(res)[i])),
 #'                  res[[i]]$map)
 #'   }
 #'
-#'   tagList(html)
+#'   htmltools::tagList(html)
 #' }}
 #'
 do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
@@ -563,12 +560,14 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
   opt <- getOption("warn")
   options(warn = 1)
 
+  message("Reading config file: ", cfgfile)
   cfgs <- read_cfg_file(cfgfile) %>%
     dplyr::filter(include == TRUE)
 
   if (!is.null(subset))
     cfgs %<>% dplyr::filter(tagName %in% subset)
 
+  message("Doing geolocation for ", nrow(cfgs), " datasets.")
   res <- cfgs %>%
     split(1:nrow(.)) %>%
     purrr::map(do_geolocation, folder = folder, shapefolder = shapefolder) %>%
@@ -729,7 +728,9 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     tagdata <- dat %>%
       dplyr::select(datetime, light) %>%
       dplyr::rename(Date = datetime,
-                    Light = light)
+                    Light = light) %>%
+      # PreprocessLight expects times in GMT and produces warnings otherwise
+      dplyr::mutate(Date = structure(Date, tzone = "GMT"))
 
     # get twilights in TwGeos format (may want them for plotting later)
     twi.geos <- TwGeos::preprocessLight(
@@ -765,11 +766,8 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
 
   }
 
-  # Extract calibration twilights needed below gefore twi gets filtered.
+  # Extract calibration twilights needed below before twi gets filtered.
   calibtwi <- dplyr::filter(twi, src == "Calib")
-
-  ###### XXX Plot the lightimage with twilights
-  ###### XXX show the calibration dates with lines
 
   # filter non-deployment dates
   if (!is.na(cfg$deplStart) && !is.na(cfg$deplEnd)) {
@@ -802,20 +800,22 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     pkg <- installed.packages()
     pkg <- pkg[pkg[,"Package"] == "GeoLight", ]
     if ((length(pkg) > 0) && (pkg["Version"] >= "2.0.1")) {
-      # New style getElevation call
-      elev <- try(GeoLight::getElevation(twl = calibtwi,
+      # New style getElevation call. getElevation() uses uses deprecated options
+      # with ggplot, thus the suppressWarnings() call.
+      elev <- try(suppressWarnings(GeoLight::getElevation(twl = calibtwi,
                                      known.coord = calibLoc,
-                                     method = "gamma"), silent = TRUE)
+                                     method = "gamma")), silent = TRUE)
 
       # Check for getElevation crash.
       if (inherits(elev,"try-error")) {
         paste0("GeoLight::getElevation() failed when attempting to calculate the sun elevation angle") %>%
-          paste0(" from your calibration data.\n\nYou have Version >= 2.0.1 of the GeoLight package installed.") %>%
-          paste0(" There is a bug in version 2.0.1 (see https://github.com/slisovski/GeoLight/issues/3)") %>%
+          paste0(" from your calibration data.\n\nYou're using Version", pkg[Version], " the GeoLight package installed.") %>%
+          paste0(" There is a bug in GeoLight > version 2.0.1 (see https://github.com/slisovski/GeoLight/issues/3)") %>%
           paste0(" that may prevent GeoLight::getElevation() from working properly if your calibration data is close in time to an equinox.") %>%
+          paste0(" (or in some rare cases even if it's not close to the equinox.")
           paste0(" \n\nAs a workaround, you can download version 2.0.0 of GeoLight from https://cran.r-project.org/src/contrib/Archive/GeoLight/") %>%
           paste0(" and install it with devtools::install_local(). Alternatively, you can try using calibration") %>%
-          paste0(" data that is further in time from the equinox.") %>%
+          paste0(" data that is further in time from the equinox or change your lThresh to be close to the smallest light level shown in the calibration plot above.") %>%
           stop(call. = FALSE)
       }
     } else {
@@ -839,7 +839,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   ########## keep calibration points? ----
 
   if (cfg$keepCalibPoints) {
-    message("Getting calibration period computed locations")
+    message("Computing calibration period positions")
     calibCoord <- GeoLight::coord(calibtwi$tFirst, calibtwi$tSecond,
                                   calibtwi$type, degElevation = elev)
     cat("\n")
@@ -868,6 +868,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
   }
 
   # calculate locations
+  message("Computing deployment period positions")
   coord <- GeoLight::coord(twi$tFirst, twi$tSecond, twi$type, degElevation = elev)
   cat("\n")
 
@@ -1102,7 +1103,7 @@ do_geolocation <- function(cfg, folder, shapefolder = NULL) {
     print(m)
   }
 
-  message("All done.")
+  message("All done processing ", cfg$tagName)
   list(posns = traj, elev = elev, light = dat,
        act = if(exists("act")) {
          act
@@ -1117,13 +1118,16 @@ do_shapefile <- function(dat, lngcol, latcol, elev, cfg, shapefolder) {
   filename <- paste0(cfg$tagName, "_thr_", cfg$lThresh, "_elev_", round(elev, 2),
                 ifelse(cfg$boxcarSmooth, paste0("_smooth", cfg$b_iter), ""))
   message(sprintf("Creating point shapefile: %s", filename))
-  sf::st_write(
+
+  # Create shapefile suppressing whinging about saving datetime fields as
+  # strings.
+  suppressWarnings(sf::st_write(
     shp,
     dsn = shapefolder,
     layer = filename,
     driver = "ESRI Shapefile",
     delete_layer = TRUE
-  )
+  ))
 
   shp
 }

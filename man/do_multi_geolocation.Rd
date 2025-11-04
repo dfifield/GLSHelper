@@ -119,7 +119,8 @@ as a surprise.
 }
 }
 
-\item{lThresh - integer, required}{The light threshold level for dawn/dusk. See
+\item{lThresh - numeric, required}{The light threshold level for dawn/dusk.
+If \code{log} is \code{TRUE} then this must be on the log scale. See
 \href{https://geolocationmanual.vogelwarte.ch/twilight.html}{Chapter 4: Twilight
 annotation} in the \href{https://geolocationmanual.vogelwarte.ch}{Light level geolocation analysis}
 manual for more info.}
