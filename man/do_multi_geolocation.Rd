@@ -119,13 +119,14 @@ as a surprise.
 }
 }
 
-\item{lThresh - integer, required}{The light threshold level for dawn/dusk. See
-\code{\link[GeoLight]{twilightCalc}} in the \pkg{GeoLight} package
-for more info.}
+\item{lThresh - numeric, required}{The light threshold level for dawn/dusk.
+If \code{log} is \code{TRUE} then this must be on the log scale. See
+\href{https://geolocationmanual.vogelwarte.ch/twilight.html}{Chapter 4: Twilight
+annotation} in the \href{https://geolocationmanual.vogelwarte.ch}{Light level geolocation analysis}
+manual for more info.}
 
-\item{maxLightInt - integer, required}{The duration in minutes over which the tag records the
-maximum light interval - typically 10, 5, or 2. This corresponds to the
-\code{maxLight} argument to \code{\link[GeoLight]{twilightCalc}}}
+\item{maxLightInt - integer, obsolete}{No longer needed as of version 0.3 which now
+uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 
 \item{doTwilights - logical, required}{Whether to do the twilight annotation process. If \code{TRUE}
 \code{\link[TwGeos]{preprocessLight}} is invoked to interactively annotate
@@ -165,8 +166,8 @@ Start/end date/time of the calibration (ie, ground-truthing) period.}
 \item{calibLat, calibLong - numeric, required}{Coordinates of the calibration location. All geographic
 coordinates are assumed to reference the WGS84 datum.}
 
-\item{calibLThresh - numeric, optional}{Light threshold for calibration data.
-If \code{NA} then the value of \code{lThresh} is used instead.}
+\item{calibLThresh - numeric, obsolete}{No longer needed as of version 0.3 which now
+uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 
 \item{elev - numeric, optional}{The sun elevation angle when \code{lThresh} units of light
 are recorded. Leave blank (normal case) to have this computed from the
@@ -176,9 +177,8 @@ calibration data.}
 output? See the \code{Value} section below for help on
 distinguishing calibration vs deployment positions in the output.}
 
-\item{calibAsk - logical, required}{Ask the user to confirm each twilight during
-the calibration period? This corresponds to the \code{ask} argument to
-\code{\link[GeoLight]{twilightCalc}}.}
+\item{calibAsk - logical, obsolete}{No longer needed as of version 0.3 which now
+uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 
 \item{createShapefile - logical, required}{Should a shapefile of the points be
 created. Shapefiles will be created in the folder indicated by the
