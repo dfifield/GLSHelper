@@ -34,8 +34,7 @@ configuration file. Each element of this list is itself a list containing:
 \itemize{
 \item{posns - [dataframe] the computed positions, with columns:}
 \itemize{
-\item{\code{tFirst, tSecond, type} - sun rise/set times. See
-\code{\link[GeoLight]{twilightCalc} for info.}}
+\item{\code{tFirst, tSecond, type} - sun rise/set times.}
 \item{\code{src} - the source of the position, either \code{"Calib"} for
 calibration period or \code{"Deployment"} for deployment period.}
 \item{\code{lng, lat} - the longitude and latitude.}
@@ -53,7 +52,7 @@ optional date filtering.}
 }
 }
 \description{
-Process multiple GLS logger raw light data sets according to
+Process multiple GLS logger raw light datasets according to
 settings given in a configuration file, following the procedure set out
 in \href{https://geolocationmanual.vogelwarte.ch/}{Light level geolocation analysis}
 using the the \href{https://github.com/SLisovski/GeoLight}{\pkg{GeoLight}} package.
@@ -69,8 +68,8 @@ processes each data set according to the configuration options given.
 The names, data types, and meanings of the columns in the configuration file
 file are documented in the list below in the order they appear in the file.
 
-Example configuration CSV and Excel files are included with this package
-and can be found in the folder given by the following commands:
+Example configuration files in CSV and Excel formats are included with this package
+and can be found in the folder returned by:
 
 \code{system.file("extdata", "geolocation_settings.csv", package = "GLSHelper")}
 
@@ -125,7 +124,7 @@ If \code{log} is \code{TRUE} then this must be on the log scale. See
 annotation} in the \href{https://geolocationmanual.vogelwarte.ch}{Light level geolocation analysis}
 manual for more info.}
 
-\item{maxLightInt - integer, obsolete}{No longer needed as of version 0.3 which now
+\item{maxLightInt - integer, deprecated}{No longer needed as of version 0.3 which now
 uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 
 \item{doTwilights - logical, required}{Whether to do the twilight annotation process. If \code{TRUE}
@@ -166,7 +165,7 @@ Start/end date/time of the calibration (ie, ground-truthing) period.}
 \item{calibLat, calibLong - numeric, required}{Coordinates of the calibration location. All geographic
 coordinates are assumed to reference the WGS84 datum.}
 
-\item{calibLThresh - numeric, obsolete}{No longer needed as of version 0.3 which now
+\item{calibLThresh - numeric, deprecated}{No longer needed as of version 0.3 which now
 uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 
 \item{elev - numeric, optional}{The sun elevation angle when \code{lThresh} units of light
@@ -177,7 +176,7 @@ calibration data.}
 output? See the \code{Value} section below for help on
 distinguishing calibration vs deployment positions in the output.}
 
-\item{calibAsk - logical, obsolete}{No longer needed as of version 0.3 which now
+\item{calibAsk - logical, deprecated}{No longer needed as of version 0.3 which now
 uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 
 \item{createShapefile - logical, required}{Should a shapefile of the points be
@@ -358,6 +357,8 @@ coarse-scale or fine-scale activity data of BAS/BioTrack devices.}
 }
 
 \examples{
+
+#
 res <- do_multi_geolocation(folder = here::here("Data/Tag data"),
                             cfgfile = here::here("Data/geolocation_settings.csv"),
                             shapefolder = here::here("GIS/Shapefiles"))
@@ -374,11 +375,11 @@ if (isTRUE(getOption('knitr.in.progress'))) {
   html <- list()
   for (i in 1:length(res)) {
     html <- list(html,
-                 h2(paste0(i, "_", names(res)[i])),
+                 htmltools::h2(paste0(i, "_", names(res)[i])),
                  res[[i]]$map)
   }
 
-  tagList(html)
+  htmltools::tagList(html)
 }}
 
 }

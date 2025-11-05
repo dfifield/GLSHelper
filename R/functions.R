@@ -508,8 +508,7 @@ read_cfg_file <- function(cfgfile){
 #' \itemize{
 #'  \item{posns - \[dataframe] the computed positions, with columns:}
 #'  \itemize{
-#'      \item{\code{tFirst, tSecond, type} - sun rise/set times. See
-#'      \code{\link[GeoLight]{twilightCalc} for info.}}
+#'      \item{\code{tFirst, tSecond, type} - sun rise/set times.}
 #'      \item{\code{src} - the source of the position, either \code{"Calib"} for
 #'         calibration period or \code{"Deployment"} for deployment period.}
 #'      \item{\code{lng, lat} - the longitude and latitude.}
@@ -601,8 +600,10 @@ do_multi_geolocation <- function(folder, cfgfile, shapefolder = NULL,
 #' \itemize{
 #'  \item{posns - \[dataframe] the computed positions, with columns:}
 #'  \itemize{
-#'      \item{\code{tFirst, tSecond, type} - see
-#'      \code{\link[GeoLight]{twilightCalc} for info.}}
+#'      \item{\code{tFirst, tSecond, type} - see the
+#'        \href{https://geolocationmanual.vogelwarte.ch/GeoLight.html}{GeoLigth chapter}
+#'         of \href{https://geolocationmanual.vogelwarte.ch}{Light Level Geolocation Manual}
+#'         for more info.}
 #'      \item{\code{src} - the source of the position, either \code{"Calib"} for
 #'         calibration period or \code{"Deployment"} for deployment period.}
 #'      \item{\code{lng, lat} - the longitude and latitude.}
