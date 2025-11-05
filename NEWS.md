@@ -2,13 +2,13 @@
 
 ------------------------------------------------------------------------
 
--   remove dependence on GeoLight::twilightCalc() for getting calibration period twilights. All twilights are now calculated via TwGeos::preprocessLight() (the deployment period twilights were already using this method in version 0.1.2). This lead to the deprecation of 3 config file columns: maxLightInt, calibLThresh, and calibAsk.
+-   Removed dependence on GeoLight::twilightCalc() for getting calibration period twilights because it has been deprecated as of GeoLight version 2.1.0. Thanks to Nathanya Goudreau for spotting this. All twilights are now calculated via TwGeos::preprocessLight() (the deployment period twilights were already using this method in version 0.1.2). This led to the deprecation of 3 config file columns: maxLightInt, calibLThresh, and calibAsk.
 
--   modified lThresh config parameter to allow non-integer values.
+-   Modified lThresh config parameter to allow non-integer values.
 
--   clarify documentation on log transformation of light values in do_multi_gelocation() manual.
+-   Clarify documentation on log transformation of light values in do_multi_gelocation() manual.
 
--   clarify package docs to indicate that the analysis follows the approach laid out in [Light Level Geolocation Analysis](https://geolocationmanual.vogelwarte.ch/) manual.
+-   Clarify package docs to indicate that the analysis follows the approach laid out in [Light Level Geolocation Analysis](https://geolocationmanual.vogelwarte.ch/) manual.
 
 ## Version 0.1.2
 

@@ -241,7 +241,7 @@ read_cfg_file <- function(cfgfile){
 #'     \itemize{
 #'       \item TRUE – log transforms raw light values via:
 #'          \cr\cr
-#'          \code{transform_value = log(raw_light_value + 0.0001) + abs(min(log(raw_light_value+0.00001)))}
+#'          \code{transformed_value = log(raw_light_value + 0.0001) + abs(min(log(raw_light_value+0.00001)))}
 #'           \cr\cr
 #'           For the origin of this code, see
 #'           \href{https://geolocationmanual.vogelwarte.ch/loadingData.html}{Chapter 3 Loading data} in "Light-Level Geolocator Analyses".
@@ -274,7 +274,7 @@ read_cfg_file <- function(cfgfile){
 #'     annotation} in the \href{https://geolocationmanual.vogelwarte.ch}{Light level geolocation analysis}
 #'     manual for more info.}
 #'
-#'   \item{maxLightInt - integer, deprecated}{No longer needed as of version 0.3 which now
+#'   \item{maxLightInt - integer, deprecated}{No longer needed as of version 0.1.3 which now
 #'       uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 #'
 #'   \item{doTwilights - logical, required}{Whether to do the twilight annotation process. If \code{TRUE}
@@ -315,7 +315,7 @@ read_cfg_file <- function(cfgfile){
 #'   \item{calibLat, calibLong - numeric, required}{Coordinates of the calibration location. All geographic
 #'     coordinates are assumed to reference the WGS84 datum.}
 #'
-#'   \item{calibLThresh - numeric, deprecated}{No longer needed as of version 0.3 which now
+#'   \item{calibLThresh - numeric, deprecated}{No longer needed as of version 0.1.3 which now
 #'       uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 #'
 #'   \item{elev - numeric, optional}{The sun elevation angle when `lThresh` units of light
@@ -326,7 +326,7 @@ read_cfg_file <- function(cfgfile){
 #'      output? See the `Value` section below for help on
 #'      distinguishing calibration vs deployment positions in the output.}
 #'
-#'   \item{calibAsk - logical, deprecated}{No longer needed as of version 0.3 which now
+#'   \item{calibAsk - logical, deprecated}{No longer needed as of version 0.1.3 which now
 #'       uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 #'
 #'   \item{createShapefile - logical, required}{Should a shapefile of the points be
@@ -351,7 +351,7 @@ read_cfg_file <- function(cfgfile){
 #'       mean (in a 1:2:3:2:1 ratio) of the second previous, previous, current,
 #'       subsequent, and second subsequent position’s latitude/longitude.
 #'       If `boxcarSmooth` is `TRUE`, then both the smoothed and unsmoothed
-#'       positions and paths will be mapped and returned by [do_multi_geolocation].}
+#'       positions and paths will be mapped and returned.}
 #'
 #'   \item{b_iter - integer, required if `boxcarSmooth` is \code{TRUE}}{
 #'       Boxcar smoothers are often applied iteratively and this value indicates
