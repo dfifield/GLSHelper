@@ -274,7 +274,7 @@ read_cfg_file <- function(cfgfile){
 #'     annotation} in the \href{https://geolocationmanual.vogelwarte.ch}{Light level geolocation analysis}
 #'     manual for more info.}
 #'
-#'   \item{maxLightInt - integer, obsolete}{No longer needed as of version 0.3 which now
+#'   \item{maxLightInt - integer, deprecated}{No longer needed as of version 0.3 which now
 #'       uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 #'
 #'   \item{doTwilights - logical, required}{Whether to do the twilight annotation process. If \code{TRUE}
@@ -315,7 +315,7 @@ read_cfg_file <- function(cfgfile){
 #'   \item{calibLat, calibLong - numeric, required}{Coordinates of the calibration location. All geographic
 #'     coordinates are assumed to reference the WGS84 datum.}
 #'
-#'   \item{calibLThresh - numeric, obsolete}{No longer needed as of version 0.3 which now
+#'   \item{calibLThresh - numeric, deprecated}{No longer needed as of version 0.3 which now
 #'       uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 #'
 #'   \item{elev - numeric, optional}{The sun elevation angle when `lThresh` units of light
@@ -326,7 +326,7 @@ read_cfg_file <- function(cfgfile){
 #'      output? See the `Value` section below for help on
 #'      distinguishing calibration vs deployment positions in the output.}
 #'
-#'   \item{calibAsk - logical, obsolete}{No longer needed as of version 0.3 which now
+#'   \item{calibAsk - logical, deprecated}{No longer needed as of version 0.3 which now
 #'       uses \code{\link[TwGeos]{preprocessLight}} instead of \code{\link[GeoLight]{twilightCalc}}}
 #'
 #'   \item{createShapefile - logical, required}{Should a shapefile of the points be

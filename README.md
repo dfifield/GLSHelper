@@ -3,7 +3,7 @@ GLSHelper
 Quickly process multiple GLS datasets
 
 This package allows you to process many GLS tag datasets quickly
-    with a single function call using the approach laid out in 
+    with a single function call using the approach laid out in the
     [Light Level Geolocation Analysis](https://geolocationmanual.vogelwarte.ch/) manual.
     Internally it uses the GeoLight
     package to perform the computations. It uses a configuration file (CSV format) to
